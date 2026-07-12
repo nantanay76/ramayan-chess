@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="13" fill="#3a1120"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="11" fill="none" stroke="#d9a441" stroke-opacity="0.55" stroke-width="1.5"/>
+  <!-- Kodanda bow -->
+  <path d="M 17 47 A 21 21 0 0 1 47 17" fill="none" stroke="#e3a83d" stroke-width="3.6" stroke-linecap="round"/>
+  <!-- string -->
+  <line x1="17" y1="47" x2="47" y2="17" stroke="#f0c46a" stroke-width="1.6"/>
+  <!-- arrow -->
+  <line x1="15" y1="15" x2="46" y2="46" stroke="#f3e2c0" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M 49.5 49.5 L 41.5 46.5 L 46.5 41.5 Z" fill="#f3e2c0"/>
+  <path d="M 15 15 l -4 -1.5 M 15 15 l -1.5 -4" stroke="#f3e2c0" stroke-width="2" stroke-linecap="round"/>
+</svg>
