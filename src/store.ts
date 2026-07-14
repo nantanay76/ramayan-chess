@@ -54,6 +54,7 @@ export interface GameStore extends BoardSnapshot {
   gameOver: GameOver | null;
   thinking: boolean;
   flipped: boolean;
+  topDownView: boolean;
   soundOn: boolean;
   musicOn: boolean;
   engineError: string | null;
@@ -67,6 +68,7 @@ export interface GameStore extends BoardSnapshot {
   undoMove(): void;
   resign(): void;
   flipBoard(): void;
+  toggleTopDownView(): void;
   toggleSound(): void;
   toggleMusic(): void;
 }
@@ -142,6 +144,7 @@ export const useGame = create<GameStore>((set, get) => {
     gameOver: null,
     thinking: false,
     flipped: false,
+    topDownView: false,
     soundOn: true,
     musicOn: false,
     engineError: null,
@@ -264,6 +267,10 @@ export const useGame = create<GameStore>((set, get) => {
 
     flipBoard() {
       set({ flipped: !get().flipped });
+    },
+
+    toggleTopDownView() {
+      set({ topDownView: !get().topDownView });
     },
 
     toggleSound() {

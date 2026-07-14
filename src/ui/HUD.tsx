@@ -17,6 +17,7 @@ export function HUD() {
   const engineError = useGame((s) => s.engineError);
   const soundOn = useGame((s) => s.soundOn);
   const musicOn = useGame((s) => s.musicOn);
+  const topDownView = useGame((s) => s.topDownView);
 
   const backToMenu = useGame((s) => s.backToMenu);
   const undoMove = useGame((s) => s.undoMove);
@@ -24,6 +25,7 @@ export function HUD() {
   const flipBoard = useGame((s) => s.flipBoard);
   const toggleSound = useGame((s) => s.toggleSound);
   const toggleMusic = useGame((s) => s.toggleMusic);
+  const toggleTopDownView = useGame((s) => s.toggleTopDownView);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -78,6 +80,9 @@ export function HUD() {
           </button>
           <button className="btn small icon" onClick={toggleMusic} title="Ambient music">
             {musicOn ? '🎵' : '🎶'}
+          </button>
+          <button className="btn small icon" onClick={toggleTopDownView} title="Top-down view">
+            {topDownView ? '⬇' : '🎥'}
           </button>
           <button className="btn small icon panel-toggle" onClick={() => setPanelOpen((v) => !v)} title="Battle scroll">
             📜

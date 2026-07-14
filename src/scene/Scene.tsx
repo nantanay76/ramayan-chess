@@ -9,36 +9,111 @@ import { Pieces } from './Pieces';
 import { Environment } from './Environment';
 
 /**
- * The camera never moves during play — one cinematic angle, re-framed only
- * when the viewport aspect changes (portrait phones pull back and widen).
- * Steeper, closer, and centered on the board so every rank reads clearly and
- * the board — not the horizon — dominates the frame.
+ * The cinematic camera never moves on its own during play — re-framed only
+ * when the viewport aspect changes (portrait phones pull back and widen), or
+ * eased to/from the top-down view via the HUD toggle. Steeper, closer, and
+ * centered on the board so every rank reads clearly and the board — not the
+ * horizon — dominates the frame.
  */
 const LOOK_AT = new THREE.Vector3(0, 0.5, -2.1);
 const PITCH = (26 * Math.PI) / 180; // top-leaning, chess.com-style read of the board
 
-function CameraRig() {
-  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
-  const size = useThree((s) => s.size);
-  useEffect(() => {
-    const aspect = size.width / Math.max(1, size.height);
-    const fov = aspect < 1 ? 52 : 46;
-    // pull back until the board (~10.6 units with border) fits horizontally
-    const tanH = Math.tan((fov * Math.PI) / 360) * aspect;
-    const dist = Math.min(24, Math.max(16, 5.15 / tanH));
-    camera.position
-      .set(0, Math.sin(PITCH), Math.cos(PITCH))
-      .multiplyScalar(dist)
-      .add(LOOK_AT);
-    camera.fov = fov;
-    camera.lookAt(LOOK_AT);
-    camera.updateProjectionMatrix();
-  }, [camera, size]);
-  return null;
-}
+const TOP_LOOK_AT = new THREE.Vector3(0, 0, 0);
+// Kept short of 90°: at a true 90° pitch the camera's forward vector runs
+// parallel to world-up, which makes lookAt()'s internal right = up × forward
+// go degenerate — the board's on-screen roll becomes unstable frame to
+// frame, not just harder to read.
+const TOP_PITCH = (82 * Math.PI) / 180;
+const CAMERA_SECONDS = 0.75;
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+interface CameraTarget {
+  pos: THREE.Vector3;
+  fov: number;
+  lookAt: THREE.Vector3;
+}
+
+function cinematicTarget(aspect: number): CameraTarget {
+  const fov = aspect < 1 ? 52 : 46;
+  // pull back until the board (~10.6 units with border) fits horizontally
+  const tanH = Math.tan((fov * Math.PI) / 360) * aspect;
+  const dist = Math.min(24, Math.max(16, 5.15 / tanH));
+  const pos = new THREE.Vector3(0, Math.sin(PITCH), Math.cos(PITCH)).multiplyScalar(dist).add(LOOK_AT);
+  return { pos, fov, lookAt: LOOK_AT };
+}
+
+function topDownTarget(aspect: number): CameraTarget {
+  const fov = aspect < 1 ? 52 : 46;
+  const tanV = Math.tan((fov * Math.PI) / 360);
+  // near-90° pitch means either axis can be the binding one depending on
+  // orientation, unlike the oblique cinematic angle where horizontal always
+  // is — so pick whichever axis is tighter instead of reusing that formula.
+  const dist = Math.min(30, Math.max(15, 5.65 / (tanV * Math.min(1, aspect))));
+  const pos = new THREE.Vector3(0, Math.sin(TOP_PITCH), Math.cos(TOP_PITCH)).multiplyScalar(dist).add(TOP_LOOK_AT);
+  return { pos, fov, lookAt: TOP_LOOK_AT };
+}
+
+function lerpCameraTarget(a: CameraTarget, b: CameraTarget, t: number): CameraTarget {
+  return {
+    pos: a.pos.clone().lerp(b.pos, t),
+    fov: a.fov + (b.fov - a.fov) * t,
+    lookAt: a.lookAt.clone().lerp(b.lookAt, t),
+  };
+}
+
+function applyCameraTarget(camera: THREE.PerspectiveCamera, target: CameraTarget) {
+  camera.position.copy(target.pos);
+  camera.fov = target.fov;
+  camera.lookAt(target.lookAt);
+  camera.updateProjectionMatrix();
+}
+
+function CameraRig() {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const size = useThree((s) => s.size);
+  const topDown = useGame((s) => s.topDownView);
+  const mounted = useRef(false);
+  const lastTopDown = useRef(topDown);
+  const anim = useRef({ from: cinematicTarget(1), to: cinematicTarget(1), t: 1 });
+
+  useEffect(() => {
+    const aspect = size.width / Math.max(1, size.height);
+    const target = topDown ? topDownTarget(aspect) : cinematicTarget(aspect);
+
+    if (!mounted.current) {
+      mounted.current = true;
+      lastTopDown.current = topDown;
+      anim.current = { from: target, to: target, t: 1 };
+      applyCameraTarget(camera, target);
+      return;
+    }
+
+    if (topDown === lastTopDown.current) {
+      // resize only — snap, this isn't a user-facing "switch"
+      anim.current = { from: target, to: target, t: 1 };
+      applyCameraTarget(camera, target);
+      return;
+    }
+
+    lastTopDown.current = topDown;
+    const a = anim.current;
+    // blend from the currently-interpolated point, not the mutable camera
+    // object, so interrupting a still-running transition doesn't jump
+    const current = lerpCameraTarget(a.from, a.to, easeInOutCubic(a.t));
+    anim.current = { from: current, to: target, t: 0 };
+  }, [camera, size, topDown]);
+
+  useFrame((_, dt) => {
+    const a = anim.current;
+    if (a.t >= 1) return;
+    a.t = Math.min(1, a.t + dt / CAMERA_SECONDS);
+    applyCameraTarget(camera, lerpCameraTarget(a.from, a.to, easeInOutCubic(a.t)));
+  });
+
+  return null;
 }
 
 const FLIP_SECONDS = 0.85;
@@ -75,7 +150,7 @@ function BoardRig({ children }: { children: React.ReactNode }) {
 
 /** Best-effort real light-shafts anchored to the sun mesh Environment reports
  *  up via onSunMesh — falls back to just Bloom + Vignette until it mounts. */
-function Effects({ sunMesh }: { sunMesh: THREE.Mesh | null }) {
+function Effects({ sunMesh, resolutionScale }: { sunMesh: THREE.Mesh | null; resolutionScale: number }) {
   const effects = useMemo(() => {
     const list = [
       <Bloom key="bloom" luminanceThreshold={0.55} luminanceSmoothing={0.25} intensity={0.5} mipmapBlur />,
@@ -101,16 +176,60 @@ function Effects({ sunMesh }: { sunMesh: THREE.Mesh | null }) {
   return (
     // resolutionScale keeps the (expensive) post-processing passes cheap on
     // modest GPUs without softening the main 3D render, which stays at the
-    // Canvas's own dpr.
-    <EffectComposer multisampling={0} enableNormalPass={false} resolutionScale={0.75}>
+    // Canvas's own dpr — tied to the same quality tier as shadows/dpr so it
+    // scales down with everything else instead of being a flat, permanent tax.
+    <EffectComposer multisampling={0} enableNormalPass={false} resolutionScale={resolutionScale}>
       {effects}
     </EffectComposer>
   );
 }
 
+interface QualityTier {
+  dprCap: number;
+  shadows: 'soft' | 'percentage' | 'basic';
+  shadowMapSize: number;
+  postScale: number;
+}
+
+const QUALITY_TIERS: QualityTier[] = [
+  { dprCap: 1.5, shadows: 'soft', shadowMapSize: 1024, postScale: 1 },
+  { dprCap: 1.25, shadows: 'percentage', shadowMapSize: 1024, postScale: 0.75 },
+  { dprCap: 1, shadows: 'basic', shadowMapSize: 512, postScale: 0.5 },
+];
+
+/** Shadow map only reallocates when light.shadow.map is null — three.js
+ *  won't resize an already-allocated map just because shadow-mapSize changed. */
+function ShadowSun({ mapSize }: { mapSize: number }) {
+  const ref = useRef<THREE.DirectionalLight>(null);
+  useEffect(() => {
+    const light = ref.current;
+    if (!light) return;
+    light.shadow.map?.dispose();
+    light.shadow.map = null;
+  }, [mapSize]);
+  return (
+    <directionalLight
+      ref={ref}
+      position={[6, 12, 5]}
+      intensity={1.5}
+      color="#ffe3c2"
+      castShadow
+      shadow-mapSize={[mapSize, mapSize]}
+      shadow-camera-left={-7}
+      shadow-camera-right={7}
+      shadow-camera-top={7}
+      shadow-camera-bottom={-7}
+      shadow-camera-far={40}
+      shadow-bias={-0.0004}
+    />
+  );
+}
+
 export function Scene() {
   const clearSelection = useGame((s) => s.clearSelection);
-  const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio));
+  const [qualityTier, setQualityTier] = useState(0);
+  const tier = QUALITY_TIERS[qualityTier];
+  const dpr = Math.min(tier.dprCap, window.devicePixelRatio);
   const [sunMesh, setSunMesh] = useState<THREE.Mesh | null>(null);
   // PerformanceMonitor's first sample window would otherwise land squarely on
   // the one-time startup hitch (shader compile + GLB decode) and read that as
@@ -125,35 +244,26 @@ export function Scene() {
   return (
     <div className="scene-wrap">
       <Canvas
-        shadows
+        shadows={tier.shadows}
         dpr={dpr}
         camera={{ position: [0, 7.4, 8.8], fov: 42 }}
         onPointerMissed={clearSelection}
       >
         {monitorReady && (
+          // flipflops/onFallback are intentionally left at their drei
+          // defaults (Infinity/unused): the default lets the monitor keep
+          // adapting for the whole session. Passing flipflops permanently
+          // freezes quality at whatever tier is active once enough
+          // adjustments happen, with no way back — that was the bug.
           <PerformanceMonitor
-            flipflops={3}
-            onDecline={() => setDpr(1)}
-            onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio))}
-            onFallback={() => setDpr(1)}
+            onIncline={() => setQualityTier((t) => Math.max(0, t - 1))}
+            onDecline={() => setQualityTier((t) => Math.min(QUALITY_TIERS.length - 1, t + 1))}
           />
         )}
         <CameraRig />
         <fog attach="fog" args={['#241536', 30, 120]} />
         <ambientLight intensity={0.55} color="#ffd9b0" />
-        <directionalLight
-          position={[6, 12, 5]}
-          intensity={1.5}
-          color="#ffe3c2"
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-          shadow-camera-left={-7}
-          shadow-camera-right={7}
-          shadow-camera-top={7}
-          shadow-camera-bottom={-7}
-          shadow-camera-far={40}
-          shadow-bias={-0.0004}
-        />
+        <ShadowSun mapSize={tier.shadowMapSize} />
         <directionalLight position={[-8, 6, -6]} intensity={0.4} color="#7d9bff" />
         {/* environment rides the rig too: Lanka rises behind the demon army,
             the mainland shore behind Ram's — whichever side you play */}
@@ -165,7 +275,7 @@ export function Scene() {
           </Suspense>
         </BoardRig>
         <EdgeLabels />
-        <Effects sunMesh={sunMesh} />
+        <Effects sunMesh={sunMesh} resolutionScale={tier.postScale} />
       </Canvas>
     </div>
   );

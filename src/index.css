@@ -9,6 +9,12 @@
   --cream: #f3e2c0;
   --cream-dim: #cfb98f;
   --ember: #ff7a2f;
+  --lanka-dim: #7e6a9e;
+  --lanka: #9a86b8;
+  --lanka-bright: #a793c9;
+  --danger: #ff6b5a;
+  --danger-bright: #ff8a7a;
+  --gold-ink: #2a1207;
   --font-display: 'Cinzel', Georgia, 'Times New Roman', serif;
   --font-hi: 'Tiro Devanagari Hindi', 'Nirmala UI', 'Mangal', serif;
   --font-ui: 'Segoe UI', system-ui, sans-serif;
@@ -116,6 +122,10 @@ button {
   transition: all 0.15s;
 }
 
+.tab:hover {
+  border-color: rgba(217, 164, 65, 0.7);
+}
+
 .tab.active {
   background: linear-gradient(180deg, var(--maroon-2), var(--maroon));
   color: var(--cream);
@@ -157,7 +167,7 @@ button {
 
 .chip.active {
   background: linear-gradient(180deg, rgba(217, 164, 65, 0.9), rgba(176, 120, 32, 0.9));
-  color: #2a1207;
+  color: var(--gold-ink);
   border-color: var(--gold-bright);
   box-shadow: 0 0 16px rgba(217, 164, 65, 0.35);
 }
@@ -171,6 +181,10 @@ button {
   font-size: 0.62rem;
   letter-spacing: 0.04em;
   opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .level-tagline {
@@ -207,6 +221,10 @@ button {
   transition: all 0.13s;
 }
 
+.side:hover {
+  border-color: rgba(217, 164, 65, 0.7);
+}
+
 .side.active {
   border-color: var(--gold);
   background: linear-gradient(180deg, rgba(107, 29, 44, 0.7), rgba(74, 20, 32, 0.7));
@@ -225,7 +243,7 @@ button {
 }
 
 .side-glyph.lanka {
-  color: #9a86b8;
+  color: var(--lanka);
   text-shadow: 0 0 12px rgba(154, 134, 184, 0.5);
 }
 
@@ -253,7 +271,7 @@ button {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-size: 1rem;
-  color: #2a1207;
+  color: var(--gold-ink);
   padding: 14px 42px;
   border-radius: 999px;
   border: 1px solid var(--gold-bright);
@@ -355,7 +373,7 @@ button {
 }
 
 .turn-dot.lanka {
-  background: #7e6a9e;
+  background: var(--lanka-dim);
   box-shadow: 0 0 8px rgba(126, 106, 158, 0.9);
 }
 
@@ -412,7 +430,7 @@ button {
 }
 
 .btn.danger:hover:not(:disabled) {
-  border-color: #ff6b5a;
+  border-color: var(--danger);
   box-shadow: 0 0 14px rgba(255, 107, 90, 0.35);
 }
 
@@ -422,7 +440,7 @@ button {
   left: 50%;
   transform: translateX(-50%);
   background: rgba(122, 28, 28, 0.92);
-  border: 1px solid #ff8a7a;
+  border: 1px solid var(--danger-bright);
   border-radius: 10px;
   padding: 10px 18px;
   font-size: 0.85rem;
@@ -481,7 +499,7 @@ button {
 }
 
 .cap.lanka {
-  color: #a793c9;
+  color: var(--lanka-bright);
 }
 
 .none {
@@ -566,6 +584,26 @@ button {
   backdrop-filter: blur(4px);
   z-index: 10;
   padding: 16px;
+  overflow-y: auto;
+}
+
+.btn:focus-visible,
+.tab:focus-visible,
+.chip:focus-visible,
+.side:focus-visible,
+.promo-btn:focus-visible,
+.start-btn:focus-visible,
+.inspect-close:focus-visible,
+.inspect-btn:focus-visible {
+  outline-width: 2px;
+  outline-style: solid;
+  outline-color: var(--gold-bright);
+  outline-offset: 2px;
+  /* these elements' own `transition: all` (for hover) otherwise also
+     transitions outline-style from its none→solid default, which corrupts
+     outline-color's computed/rendered value in Chromium — the focus ring
+     should snap in instantly anyway, not fade. */
+  transition: none;
 }
 
 .modal {
@@ -774,5 +812,46 @@ button {
 
   .side {
     max-width: none;
+  }
+
+  .menu-card {
+    padding: 28px 18px 22px;
+  }
+
+  .btn.small.icon {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .inspect-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .inspect-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 920px) {
+  .turn-banner {
+    font-size: 0.8rem;
+    padding: 9px 16px;
+  }
+
+  .side-picker {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .side {
+    max-width: 260px;
   }
 }
