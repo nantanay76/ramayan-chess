@@ -4,7 +4,7 @@ import { ChessGame, type GameOver } from './game/chess';
 import { derivePieces, type TrackedPiece } from './game/pieceTracker';
 import { LEVELS } from './engine/difficulty';
 import { getAiMove, startNewEngineGame, stopEngine } from './engine/ai';
-import { playSound, setSoundEnabled, startMusic, stopMusic } from './audio/sounds';
+import { playSound, playCaptureVoice, setSoundEnabled, startMusic, stopMusic } from './audio/sounds';
 
 export type Mode = 'ai' | 'local';
 export type Screen = 'menu' | 'game';
@@ -90,6 +90,7 @@ export const useGame = create<GameStore>((set, get) => {
       playSound('check');
     } else if (move.flags.includes('c') || move.flags.includes('e')) {
       playSound('capture');
+      playCaptureVoice(move.color);
     } else {
       playSound('move');
     }

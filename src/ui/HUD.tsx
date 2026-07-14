@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Color } from 'chess.js';
 import { useGame } from '../store';
 import { ARMY, CHARACTERS, PIECE_GLYPH } from '../game/characters';
+import { InspectModal } from './InspectModal';
 
 export function HUD() {
   const turn = useGame((s) => s.turn);
@@ -25,12 +26,17 @@ export function HUD() {
   const toggleMusic = useGame((s) => s.toggleMusic);
 
   const [panelOpen, setPanelOpen] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
   const movesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = movesRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [history.length]);
+
+  useEffect(() => {
+    setInspecting(false);
+  }, [selected]);
 
   const aiColor: Color = playerColor === 'w' ? 'b' : 'w';
   const selectedPiece = selected ? pieces.find((p) => p.square === selected) : undefined;
@@ -129,11 +135,25 @@ export function HUD() {
 
       {selectedPiece && (
         <div className="piece-chip">
-          <span className="piece-chip-hi">{CHARACTERS[selectedPiece.color][selectedPiece.type].hi}</span>
-          <span className="piece-chip-en">
-            {CHARACTERS[selectedPiece.color][selectedPiece.type].en} · {CHARACTERS[selectedPiece.color][selectedPiece.type].piece}
-          </span>
+          <div className="piece-chip-text">
+            <span className="piece-chip-hi">{CHARACTERS[selectedPiece.color][selectedPiece.type].hi}</span>
+            <span className="piece-chip-en">
+              {CHARACTERS[selectedPiece.color][selectedPiece.type].en} ·{' '}
+              {CHARACTERS[selectedPiece.color][selectedPiece.type].piece}
+            </span>
+          </div>
+          <button className="inspect-btn" onClick={() => setInspecting(true)} title="Inspect this piece">
+            🔍
+          </button>
         </div>
+      )}
+
+      {inspecting && selectedPiece && (
+        <InspectModal
+          type={selectedPiece.type}
+          color={selectedPiece.color}
+          onClose={() => setInspecting(false)}
+        />
       )}
     </>
   );

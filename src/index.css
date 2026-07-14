@@ -299,6 +299,17 @@ button {
   display: block;
 }
 
+.scene-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+@media (min-width: 921px) {
+  .scene-wrap {
+    right: 280px;
+  }
+}
+
 .hud-top {
   position: absolute;
   top: 0;
@@ -523,7 +534,9 @@ button {
   background: rgba(23, 11, 22, 0.75);
   backdrop-filter: blur(8px);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
 }
 
 .piece-chip-hi {
@@ -642,6 +655,79 @@ button {
 .promo-btn small {
   font-size: 0.62rem;
   color: var(--cream-dim);
+}
+
+/* ---------------------------------------------------------------- inspect */
+
+.inspect-modal {
+  position: relative;
+  width: min(480px, 100%);
+  text-align: center;
+  border: 1px solid rgba(217, 164, 65, 0.5);
+  outline: 4px solid rgba(217, 164, 65, 0.12);
+  outline-offset: 4px;
+  border-radius: 16px;
+  padding: 18px 20px 22px;
+  background: linear-gradient(180deg, rgba(74, 20, 32, 0.94), rgba(23, 11, 22, 0.97));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+.inspect-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(217, 164, 65, 0.4);
+  background: rgba(23, 11, 22, 0.8);
+  color: var(--cream);
+  font-size: 0.85rem;
+  z-index: 2;
+}
+
+.inspect-close:hover {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 14px rgba(217, 164, 65, 0.3);
+}
+
+.inspect-viewport {
+  width: 100%;
+  height: 300px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 30%, rgba(107, 29, 44, 0.4), rgba(10, 4, 9, 0.9));
+  margin-bottom: 16px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.inspect-lore {
+  margin-top: 14px;
+  color: var(--cream-dim);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.piece-chip-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.inspect-btn {
+  border: 1px solid rgba(217, 164, 65, 0.35);
+  border-radius: 8px;
+  background: rgba(217, 164, 65, 0.12);
+  color: var(--gold-bright);
+  font-size: 0.95rem;
+  padding: 5px 9px;
+  line-height: 1;
+}
+
+.inspect-btn:hover {
+  border-color: var(--gold-bright);
+  background: rgba(217, 164, 65, 0.22);
 }
 
 /* ---------------------------------------------------------------- mobile */

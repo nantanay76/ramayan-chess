@@ -1,51 +1,58 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const SHOTS = 'C:/Users/USER/AppData/Local/Temp/claude/C--Users-USER/bd0f6529-5895-4395-8b6a-8dbd61ea7c11/scratchpad/shots/';
-mkdirSync(SHOTS, { recursive: true });
+const URL = 'http://localhost:5173/';
+const OUT = (process.env.SHOTS_OUT || process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), '..', '.shots')) + '/';
+mkdirSync(OUT, { recursive: true });
 
-const browser = await chromium.launch({
-  channel: 'chrome',
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-});
+let browser;
+for (const channel of ['chrome', 'msedge']) {
+  try {
+    browser = await chromium.launch({ channel, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    break;
+  } catch {}
+}
+if (!browser) { console.log('NO BROWSER'); process.exit(1); }
+
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-await page.goto('http://localhost:5173/', { waitUntil: 'domcontentloaded' });
+const errs = [];
+page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
+page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
+
+await page.goto(URL, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
+await page.screenshot({ path: OUT + 's1-menu.png' });
 
 await page.evaluate(() => window.__game.getState().startGame('local', 0, 'w'));
-await page.waitForTimeout(1500);
-await page.screenshot({ path: SHOTS + 'v2-board.png' });
+await page.waitForTimeout(4000);
+await page.screenshot({ path: OUT + 's2-board.png' });
 
-// a few moves for last-move highlight + selection state
-await page.evaluate(() => {
-  const s = window.__game.getState();
-  s.clickSquare('e2');
-  s.clickSquare('e4');
-});
-await page.waitForTimeout(300);
-await page.evaluate(() => {
-  const s = window.__game.getState();
-  s.clickSquare('e7');
-  s.clickSquare('e5');
-});
-await page.waitForTimeout(300);
-await page.evaluate(() => window.__game.getState().clickSquare('g1'));
+// select a piece to see highlights
+await page.evaluate(() => window.__game.getState().clickSquare('e2'));
+await page.waitForTimeout(400);
+await page.screenshot({ path: OUT + 's3-selected.png' });
+
+// flip: mid-animation and settled
+await page.evaluate(() => { window.__game.getState().clearSelection(); window.__game.getState().flipBoard(); });
+await page.waitForTimeout(380);
+await page.screenshot({ path: OUT + 's4-flip-mid.png' });
 await page.waitForTimeout(900);
-await page.screenshot({ path: SHOTS + 'v2-selection.png' });
+await page.screenshot({ path: OUT + 's5-flipped.png' });
+await page.evaluate(() => window.__game.getState().flipBoard());
+await page.waitForTimeout(1200);
 
-// zoom-ish look: lower camera by scrolling (orbit zoom in)
-await page.mouse.move(640, 400);
-await page.mouse.wheel(0, -400);
-await page.waitForTimeout(300);
-await page.mouse.wheel(0, -400);
-await page.waitForTimeout(800);
-await page.screenshot({ path: SHOTS + 'v2-close.png' });
-
-// mobile viewport check
-await page.setViewportSize({ width: 390, height: 780 });
-await page.waitForTimeout(800);
-await page.screenshot({ path: SHOTS + 'v2-mobile.png' });
-
+console.log('errors:', errs.length ? errs.slice(0, 8) : 'none');
 await browser.close();
-console.log('shots done');
+
+// portrait pass
+const b2 = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p2 = await b2.newPage({ viewport: { width: 390, height: 844 } });
+await p2.goto(URL, { waitUntil: 'domcontentloaded' });
+await p2.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
+await p2.evaluate(() => window.__game.getState().startGame('local', 0, 'w'));
+await p2.waitForTimeout(4000);
+await p2.screenshot({ path: OUT + 's6-portrait.png' });
+await b2.close();
+console.log('DONE');

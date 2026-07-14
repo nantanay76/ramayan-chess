@@ -1,12 +1,14 @@
 import type { Square } from 'chess.js';
 
-/** Board is 8x8 unit squares centered on the origin; +z faces the default camera. */
-export function squareToWorld(square: Square, flipped: boolean): [number, number] {
+/**
+ * Board is 8x8 unit squares centered on the origin; +z faces the default
+ * camera and rank 1 sits on the +z side. Board orientation (flip) is a
+ * rotation of the whole board group, not a coordinate remap.
+ */
+export function squareToWorld(square: Square): [number, number] {
   const file = square.charCodeAt(0) - 97;
   const rank = square.charCodeAt(1) - 49;
-  const x = flipped ? 3.5 - file : file - 3.5;
-  const z = flipped ? rank - 3.5 : 3.5 - rank;
-  return [x, z];
+  return [file - 3.5, 3.5 - rank];
 }
 
 export const SQUARES: Square[] = (() => {

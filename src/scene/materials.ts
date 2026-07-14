@@ -3,14 +3,12 @@ import * as THREE from 'three';
 /** Shared materials — one instance each, reused by every mesh. */
 
 // Ram's army: ivory sandstone with warm gold
-export const ramMain = new THREE.MeshPhysicalMaterial({
+export const ramMain = new THREE.MeshStandardMaterial({
   color: '#f0e3c6',
-  roughness: 0.34,
+  roughness: 0.3,
   metalness: 0.06,
-  clearcoat: 0.45,
-  clearcoatRoughness: 0.5,
 });
-export const ramAccent = new THREE.MeshPhysicalMaterial({
+export const ramAccent = new THREE.MeshStandardMaterial({
   color: '#e3a83d',
   roughness: 0.24,
   metalness: 0.9,
@@ -19,14 +17,12 @@ export const ramAccent = new THREE.MeshPhysicalMaterial({
 });
 
 // Lanka's army: dark obsidian-bronze with ember glow
-export const lankaMain = new THREE.MeshPhysicalMaterial({
+export const lankaMain = new THREE.MeshStandardMaterial({
   color: '#3a3244',
-  roughness: 0.42,
+  roughness: 0.38,
   metalness: 0.5,
-  clearcoat: 0.35,
-  clearcoatRoughness: 0.45,
 });
-export const lankaAccent = new THREE.MeshPhysicalMaterial({
+export const lankaAccent = new THREE.MeshStandardMaterial({
   color: '#8a4a20',
   roughness: 0.3,
   metalness: 0.85,
@@ -81,15 +77,86 @@ export const checkMat = new THREE.MeshBasicMaterial({
 });
 
 // Environment
-export const oceanMat = new THREE.MeshStandardMaterial({
-  color: '#182a52',
-  roughness: 0.18,
-  metalness: 0.7,
-  emissive: '#0a1228',
-  emissiveIntensity: 0.5,
-});
 export const flameMat = new THREE.MeshStandardMaterial({
   color: '#ffb347',
   emissive: '#ff9020',
   emissiveIntensity: 2.6,
 });
+
+function radialGlowTexture(inner: string, mid: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const g = canvas.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(0.35, mid);
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(canvas);
+}
+
+/** Soft additive halo — replaces what Bloom used to do for flames. */
+export const flameGlowMat = new THREE.SpriteMaterial({
+  map: radialGlowTexture('rgba(255, 205, 130, 0.9)', 'rgba(255, 130, 45, 0.32)'),
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  transparent: true,
+});
+export const cityGlowMat = new THREE.SpriteMaterial({
+  map: radialGlowTexture('rgba(255, 160, 70, 0.5)', 'rgba(255, 100, 40, 0.16)'),
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  transparent: true,
+});
+
+// Distant land — cheapest lit materials, softened by fog
+export const sandMat = new THREE.MeshLambertMaterial({ color: '#7d5f45' });
+export const cliffMat = new THREE.MeshLambertMaterial({ color: '#3a2a4a', flatShading: true });
+export const rockMat = new THREE.MeshLambertMaterial({ color: '#4a3a4e', flatShading: true });
+export const setuStoneMat = new THREE.MeshLambertMaterial({ color: '#6e5a49', flatShading: true });
+export const palmTrunkMat = new THREE.MeshLambertMaterial({ color: '#3d2b20' });
+export const palmLeafMat = new THREE.MeshLambertMaterial({ color: '#1f3d2a', side: THREE.DoubleSide });
+
+function windowsTexture(seed: number, density: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 128;
+  const g = canvas.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 64, 128);
+  let s = seed;
+  const rand = () => {
+    s = (s * 16807) % 2147483647;
+    return s / 2147483647;
+  };
+  for (let y = 8; y < 120; y += 10) {
+    for (let x = 6; x < 58; x += 9) {
+      if (rand() < density) {
+        g.fillStyle = rand() < 0.7 ? '#ffbe6b' : '#ffd9a0';
+        g.fillRect(x, y, 3, 4);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.NearestFilter;
+  return tex;
+}
+
+/** Lanka's palace towers: dark stone with lit windows glowing across the sea.
+ *  Several variants so the skyline doesn't read as one texture tiled everywhere. */
+export const towerMats = [
+  { seed: 21, density: 0.38, color: '#231830' },
+  { seed: 53, density: 0.3, color: '#28162a' },
+  { seed: 89, density: 0.46, color: '#1e1a33' },
+  { seed: 127, density: 0.34, color: '#2b1522' },
+].map(
+  ({ seed, density, color }) =>
+    new THREE.MeshLambertMaterial({
+      color,
+      emissive: '#ffb257',
+      emissiveIntensity: 1.15,
+      emissiveMap: windowsTexture(seed, density),
+    }),
+);

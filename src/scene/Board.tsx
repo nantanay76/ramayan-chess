@@ -11,6 +11,7 @@ import {
   goldTrim,
   pillarMat,
   flameMat,
+  flameGlowMat,
   selectMat,
   targetDotMat,
   captureRingMat,
@@ -78,8 +79,7 @@ function Squares() {
 }
 
 function BoardSquare({ square, onPick }: { square: Square; onPick: (sq: Square) => void }) {
-  const flipped = useGame((s) => s.flipped);
-  const [x, z] = squareToWorld(square, flipped);
+  const [x, z] = squareToWorld(square);
   return (
     <mesh
       geometry={squareGeo}
@@ -110,7 +110,6 @@ function Overlays() {
   const targets = useGame((s) => s.targets);
   const lastMove = useGame((s) => s.lastMove);
   const checkSquare = useGame((s) => s.checkSquare);
-  const flipped = useGame((s) => s.flipped);
   const clickSquare = useGame((s) => s.clickSquare);
 
   const targetSquares = useMemo(() => {
@@ -128,16 +127,16 @@ function Overlays() {
     <group>
       {lastMove &&
         [lastMove.from, lastMove.to].map((sq) => {
-          const [x, z] = squareToWorld(sq, flipped);
+          const [x, z] = squareToWorld(sq);
           return <mesh key={`lm-${sq}`} geometry={overlayGeo} material={lastMoveMat} position={[x, 0.004, z]} rotation={flat} />;
         })}
       {selected &&
         (() => {
-          const [x, z] = squareToWorld(selected, flipped);
+          const [x, z] = squareToWorld(selected);
           return <mesh geometry={overlayGeo} material={selectMat} position={[x, 0.006, z]} rotation={flat} />;
         })()}
       {targetSquares.map(([sq, isCapture]) => {
-        const [x, z] = squareToWorld(sq, flipped);
+        const [x, z] = squareToWorld(sq);
         return (
           <mesh
             key={`t-${sq}`}
@@ -154,12 +153,14 @@ function Overlays() {
       })}
       {checkSquare &&
         (() => {
-          const [x, z] = squareToWorld(checkSquare, flipped);
+          const [x, z] = squareToWorld(checkSquare);
           return <CheckOverlay x={x} z={z} />;
         })()}
     </group>
   );
 }
+
+const flameGeo = new THREE.SphereGeometry(0.05, 10, 10);
 
 function DiyaFlame({ position }: { position: [number, number, number] }) {
   const ref = useRef<THREE.Mesh>(null);
@@ -171,7 +172,10 @@ function DiyaFlame({ position }: { position: [number, number, number] }) {
     ref.current.scale.set(s * 0.85, s * 1.25, s * 0.85);
   });
   return (
-    <mesh ref={ref} geometry={new THREE.SphereGeometry(0.05, 10, 10)} material={flameMat} position={position} />
+    <group position={position}>
+      <mesh ref={ref} geometry={flameGeo} material={flameMat} />
+      <sprite material={flameGlowMat} position={[0, 0.03, 0]} scale={[0.8, 0.8, 1]} />
+    </group>
   );
 }
 
@@ -236,17 +240,20 @@ function Frame() {
   );
 }
 
-function EdgeLabels() {
+/**
+ * Coordinate labels live outside the rotating board rig so they always hug
+ * the near/left edges of the screen; flipping re-maps which file/rank each
+ * label names instead of physically travelling with the board.
+ */
+export function EdgeLabels() {
   const flipped = useGame((s) => s.flipped);
   const labels: Array<{ key: string; text: string; x: number; z: number }> = [];
   for (let f = 0; f < 8; f++) {
     const letter = String.fromCharCode(97 + f);
-    const [x] = squareToWorld(`${letter}1` as Square, flipped);
-    labels.push({ key: `f-${letter}`, text: letter, x, z: 4.42 });
+    labels.push({ key: `f-${letter}`, text: letter, x: flipped ? 3.5 - f : f - 3.5, z: 4.42 });
   }
-  for (let r = 1; r <= 8; r++) {
-    const [, z] = squareToWorld(`a${r}` as Square, flipped);
-    labels.push({ key: `r-${r}`, text: String(r), x: -4.42, z });
+  for (let r = 0; r < 8; r++) {
+    labels.push({ key: `r-${r + 1}`, text: String(r + 1), x: -4.42, z: flipped ? r - 3.5 : 3.5 - r });
   }
   return (
     <group>
@@ -263,7 +270,6 @@ export function Board() {
       <Squares />
       <Overlays />
       <Frame />
-      <EdgeLabels />
     </group>
   );
 }

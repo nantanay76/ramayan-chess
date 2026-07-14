@@ -1,24 +1,34 @@
 import { useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { meshBounds } from '@react-three/drei';
 import { useGame } from '../store';
 import type { TrackedPiece } from '../game/pieceTracker';
 import { squareToWorld } from './coords';
-import { pieceGeometry } from './pieceGeometry';
+import { usePieceGeometry } from './pieceGeometry';
 import { ramMain, ramAccent, lankaMain, lankaAccent } from './materials';
+import { RavanaHeads } from './ravanaHeads';
 
 function PieceMesh({ piece }: { piece: TrackedPiece }) {
-  const flipped = useGame((s) => s.flipped);
   const isSelected = useGame((s) => s.selected === piece.square);
   const clickSquare = useGame((s) => s.clickSquare);
+  const flipped = useGame((s) => s.flipped);
   const [hovered, setHovered] = useState(false);
 
   const army = piece.color === 'w' ? 'ram' : 'lanka';
-  const geo = pieceGeometry(piece.type, army);
-  const [tx, tz] = squareToWorld(piece.square, flipped);
+  const geo = usePieceGeometry(piece.type, army);
+  const [tx, tz] = squareToWorld(piece.square);
   const ty = isSelected ? 0.1 : 0;
 
+  // statues face the viewer like temple idols (knights keep the classic
+  // profile); the rig carries them through a flip, so counter-rotate in
+  // group space to stay camera-facing — the lerp below makes them pirouette
+  const ry =
+    (piece.type === 'n' ? (piece.color === 'w' ? Math.PI / 2 : -Math.PI / 2) : 0) -
+    (flipped ? Math.PI : 0);
+
   const ref = useRef<THREE.Group>(null);
+  const rotRef = useRef<THREE.Group>(null);
 
   useFrame((_, rawDt) => {
     const g = ref.current;
@@ -34,19 +44,12 @@ function PieceMesh({ piece }: { piece: TrackedPiece }) {
     // gentle arc while travelling
     const hop = Math.min(0.45, dist * 0.5);
     pos.y += (ty + hop - pos.y) * Math.min(1, dt * 11);
+    const rot = rotRef.current;
+    if (rot) {
+      const d = ry - rot.rotation.y;
+      rot.rotation.y += Math.atan2(Math.sin(d), Math.cos(d)) * Math.min(1, dt * 5);
+    }
   });
-
-  // pieces face their opponent regardless of camera orientation; knights show
-  // their carved profile to the camera so the horse silhouette stays readable
-  const facesNegZ = (piece.color === 'w') !== flipped;
-  const ry =
-    piece.type === 'n'
-      ? piece.color === 'w'
-        ? 0
-        : Math.PI
-      : facesNegZ
-        ? Math.PI / 2
-        : -Math.PI / 2;
 
   return (
     <group
@@ -66,9 +69,24 @@ function PieceMesh({ piece }: { piece: TrackedPiece }) {
         document.body.style.cursor = 'auto';
       }}
     >
-      <group rotation={[0, ry, 0]} scale={hovered && !isSelected ? 1.04 : 1}>
-        <mesh geometry={geo.main} material={piece.color === 'w' ? ramMain : lankaMain} castShadow receiveShadow />
-        <mesh geometry={geo.accent} material={piece.color === 'w' ? ramAccent : lankaAccent} castShadow />
+      <group ref={rotRef} rotation={[0, ry, 0]} scale={hovered && !isSelected ? 1.04 : 1}>
+        {/* meshBounds: pointer picking against bounding spheres, not triangles */}
+        <mesh
+          geometry={geo.main}
+          material={piece.color === 'w' ? ramMain : lankaMain}
+          raycast={meshBounds}
+          castShadow
+          receiveShadow
+        />
+        {geo.accent && (
+          <mesh
+            geometry={geo.accent}
+            material={piece.color === 'w' ? ramAccent : lankaAccent}
+            raycast={meshBounds}
+            castShadow
+          />
+        )}
+        {piece.type === 'k' && piece.color === 'b' && <RavanaHeads main={geo.main} />}
       </group>
     </group>
   );

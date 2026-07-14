@@ -1,3 +1,5 @@
+import type { Color } from 'chess.js';
+
 /**
  * All audio is synthesized with WebAudio — no asset files, works offline.
  */
@@ -49,6 +51,114 @@ function knock(dur: number, peak: number, filterFreq: number, when = 0): void {
   gain.gain.value = peak;
   src.connect(filter).connect(gain).connect(a.destination);
   src.start(t);
+}
+
+function noiseBuffer(a: AudioContext, dur: number): AudioBuffer {
+  const len = Math.max(1, Math.floor(a.sampleRate * dur));
+  const buffer = a.createBuffer(1, len, a.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  return buffer;
+}
+
+function growlCurve(amount: number): Float32Array<ArrayBuffer> {
+  const n = 256;
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * amount);
+  }
+  return curve;
+}
+
+const jitter = (spread: number) => 1 + (Math.random() * 2 - 1) * spread;
+
+/**
+ * Lanka's captures: a short, dark, growly "voice" — pitched-down noise
+ * through a sweeping formant filter and light distortion, plus a couple of
+ * low chuckle pulses underneath. No real words, kept short so it's bearable
+ * rather than an actual demonic scream.
+ */
+function lankaVoice(): void {
+  const a = ac();
+  const t0 = a.currentTime;
+  const p = jitter(0.08);
+
+  const src = a.createBufferSource();
+  src.buffer = noiseBuffer(a, 0.4);
+  const bp = a.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 4;
+  bp.frequency.setValueAtTime(420 * p, t0);
+  bp.frequency.exponentialRampToValueAtTime(140 * p, t0 + 0.38);
+  const shaper = a.createWaveShaper();
+  shaper.curve = growlCurve(6);
+  const gain = a.createGain();
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(0.5, t0 + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+  src.connect(bp).connect(shaper).connect(gain).connect(a.destination);
+  src.start(t0);
+
+  [0, 0.14].forEach((delay, i) => {
+    const osc = a.createOscillator();
+    osc.type = 'sawtooth';
+    const f0 = (110 - i * 15) * p;
+    osc.frequency.setValueAtTime(f0, t0 + delay);
+    osc.frequency.exponentialRampToValueAtTime(f0 * 0.6, t0 + delay + 0.12);
+    const og = a.createGain();
+    og.gain.setValueAtTime(0.0001, t0 + delay);
+    og.gain.exponentialRampToValueAtTime(0.22, t0 + delay + 0.015);
+    og.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 0.13);
+    osc.connect(og).connect(a.destination);
+    osc.start(t0 + delay);
+    osc.stop(t0 + delay + 0.15);
+  });
+}
+
+/**
+ * Ram's captures: a warm, soft, sustained tone with a gentle bell-like
+ * overtone — soothing and relaxing rather than a triumphant fanfare.
+ */
+function ramVoice(): void {
+  const a = ac();
+  const t0 = a.currentTime;
+  const p = jitter(0.05);
+
+  const osc = a.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300 * p, t0);
+  osc.frequency.exponentialRampToValueAtTime(380 * p, t0 + 0.18);
+  osc.frequency.exponentialRampToValueAtTime(340 * p, t0 + 0.55);
+  const gain = a.createGain();
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.09);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.6);
+  osc.connect(gain).connect(a.destination);
+  osc.start(t0);
+  osc.stop(t0 + 0.65);
+
+  const overtone = a.createOscillator();
+  overtone.type = 'sine';
+  overtone.frequency.setValueAtTime(680 * p, t0 + 0.02);
+  const og = a.createGain();
+  og.gain.setValueAtTime(0.0001, t0 + 0.02);
+  og.gain.exponentialRampToValueAtTime(0.06, t0 + 0.1);
+  og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+  overtone.connect(og).connect(a.destination);
+  overtone.start(t0 + 0.02);
+  overtone.stop(t0 + 0.55);
+}
+
+/** Faction "voice" accent layered on top of the physical capture knock. */
+export function playCaptureVoice(capturingColor: Color): void {
+  if (!soundEnabled) return;
+  try {
+    if (capturingColor === 'b') lankaVoice();
+    else ramVoice();
+  } catch {
+    // never let voice synthesis break the game
+  }
 }
 
 export function playSound(kind: SoundKind): void {
