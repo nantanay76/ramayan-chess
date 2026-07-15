@@ -7,7 +7,6 @@ import type { TrackedPiece } from '../game/pieceTracker';
 import { squareToWorld } from './coords';
 import { usePieceGeometry } from './pieceGeometry';
 import { ramMain, ramAccent, lankaMain, lankaAccent } from './materials';
-import { RavanaHeads } from './ravanaHeads';
 
 function PieceMesh({ piece }: { piece: TrackedPiece }) {
   const isSelected = useGame((s) => s.selected === piece.square);
@@ -86,7 +85,6 @@ function PieceMesh({ piece }: { piece: TrackedPiece }) {
             castShadow
           />
         )}
-        {piece.type === 'k' && piece.color === 'b' && <RavanaHeads main={geo.main} />}
       </group>
     </group>
   );

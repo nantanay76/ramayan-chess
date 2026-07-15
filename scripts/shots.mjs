@@ -17,6 +17,9 @@ for (const channel of ['chrome', 'msedge']) {
 if (!browser) { console.log('NO BROWSER'); process.exit(1); }
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+// webfont fetches can hang headless Chrome's pre-screenshot font wait —
+// abort them so text falls back to local serifs and shots stay deterministic
+await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
 const errs = [];
 page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
@@ -49,6 +52,7 @@ await browser.close();
 // portrait pass
 const b2 = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const p2 = await b2.newPage({ viewport: { width: 390, height: 844 } });
+await p2.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
 await p2.goto(URL, { waitUntil: 'domcontentloaded' });
 await p2.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
 await p2.evaluate(() => window.__game.getState().startGame('local', 0, 'w'));

@@ -6,7 +6,7 @@ import type { Color, PieceSymbol } from 'chess.js';
 import { CHARACTERS } from '../game/characters';
 import { usePieceGeometry, type Army } from '../scene/pieceGeometry';
 import { ramMain, ramAccent, lankaMain, lankaAccent } from '../scene/materials';
-import { RavanaHeads } from '../scene/ravanaHeads';
+import { StudioEnv } from '../scene/StudioEnv';
 
 const TURNTABLE_SPEED = 0.5; // rad/s — slow, so details are easy to read
 
@@ -34,7 +34,6 @@ function InspectPiece({ type, color }: { type: PieceSymbol; color: Color }) {
       {geo.accent && (
         <mesh geometry={geo.accent} material={color === 'w' ? ramAccent : lankaAccent} castShadow />
       )}
-      {type === 'k' && color === 'b' && <RavanaHeads main={geo.main} />}
     </group>
   );
 }
@@ -57,8 +56,14 @@ export function InspectModal({
           ✕
         </button>
         <div className="inspect-viewport">
-          <Canvas camera={{ position: [0, 0.5, 2.5], fov: 34 }} shadows>
-            <ambientLight intensity={0.55} color="#fff2df" />
+          <Canvas
+            camera={{ position: [0, 0.5, 2.5], fov: 34 }}
+            shadows
+            dpr={[1, 1.5]}
+            gl={{ powerPreference: 'high-performance' }}
+          >
+            <StudioEnv intensity={0.7} />
+            <ambientLight intensity={0.45} color="#fff2df" />
             <directionalLight position={[2, 3, 2]} intensity={1.7} color="#ffe9c8" castShadow />
             <directionalLight position={[-2.5, 1.3, -1.5]} intensity={0.55} color="#8fb4ff" />
             <directionalLight position={[0, 1, -2.6]} intensity={0.6} color="#ffb066" />

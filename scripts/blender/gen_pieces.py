@@ -343,14 +343,17 @@ def build_rook(army):
         parts.append(sphere(army, 'main', 0.052, (0, -0.105, 0.68), seg=12, rings=10))
         for dx in (-0.09, 0.09):
             parts.append(sphere(army, 'main', 0.035, (dx, 0.01, 0.82), seg=10, rings=8))
-        # fortress collar: gold ring + temple blocks
-        parts.append(torus(army, 'accent', 0.135, 0.017, (0, 0, 0.56)))
+        # fortress collar: gold ring + temple blocks. Lowered clear of the
+        # head (bottom ~z 0.612) and blocks pushed out to straddle the ring
+        # like crenellations — they used to interpenetrate both.
+        parts.append(torus(army, 'accent', 0.135, 0.017, (0, 0, 0.535)))
         n = 6
         for i in range(n):
             a = i / n * math.pi * 2
             parts.append(box(army, 'accent', (0.05, 0.035, 0.05),
-                             (math.cos(a) * 0.14, math.sin(a) * 0.14, 0.592), (0, 0, a)))
-        parts.append(torus(army, 'accent', 0.1, 0.014, (0, 0, 0.2)))
+                             (math.cos(a) * 0.158, math.sin(a) * 0.158, 0.565), (0, 0, a)))
+        # belt: was major 0.1 — swallowed inside the skirt (radius ~0.127 there)
+        parts.append(torus(army, 'accent', 0.128, 0.015, (0, 0, 0.205)))
         return finalize('r-ram', parts)
     # kumbhakarna: colossal drowsy giant, tower-broad
     parts = pedestal(army, 0.3)
@@ -408,10 +411,46 @@ def build_knight(army):
     # bridle band around the nose
     parts.append(torus(army, 'accent', 0.042, 0.008, (0, -0.29, 0.755), (0.5, 0, 0), maj_seg=18))
     if army == 'ram':
-        # lakshman's quiver against the shoulder
-        parts.append(cyl(army, 'accent', 0.03, 0.03, 0.18, (0.085, 0.09, 0.42), (0.45, 0, -0.3), verts=10))
-        parts.append(cone(army, 'accent', 0.011, 0.055, (0.115, 0.135, 0.54), (0.45, 0, -0.3), verts=6))
-        parts.append(cone(army, 'accent', 0.011, 0.055, (0.07, 0.15, 0.55), (0.45, 0, -0.3), verts=6))
+        # lakshman's quiver against the shoulder, with a proper sheaf of
+        # arrows rising out of its mouth (the old version had two tiny cones
+        # floating beside the quiver — invisible at game scale)
+        quiver_rot = (0.45, 0, -0.3)
+        parts.append(cyl(army, 'accent', 0.032, 0.036, 0.2, (0.085, 0.09, 0.42), quiver_rot, verts=10))
+        parts.append(torus(army, 'accent', 0.036, 0.006, (0.073, 0.053, 0.51), quiver_rot, maj_seg=14))
+        # arrows stand more upright than the quiver bore (euler X ~0.28 vs
+        # 0.45 — at the bore's full forward tilt the tallest tips would graze
+        # the horse's neck) and each leans its own way, so the sheaf reads as
+        # a fan of separate arrows instead of one long tube continuing the
+        # quiver. The angle spread is swallowed inside the 0.032 bore radius.
+        from mathutils import Euler
+        mouth = Vector((0.073, 0.053, 0.505))
+        side = Vector((0.9553, -0.2955, 0.0))    # perpendicular, across the mouth
+        for dx, dy, up, rx, rz in (
+            (-0.016, 0.004, 0.125, 0.21, -0.42),
+            (0.013, 0.008, 0.155, 0.31, -0.20),
+            (0.0, -0.011, 0.145, 0.36, -0.32),
+            (0.016, -0.005, 0.112, 0.23, -0.25),
+        ):
+            rot = (rx, 0, rz)
+            aax = Euler(rot).to_matrix() @ Vector((0, 0, 1))
+            base = mouth + side * dx + aax.cross(side) * dy
+            mid = base + aax * (up / 2 - 0.05)   # shaft sinks 0.05 into the quiver
+            parts.append(cyl(army, 'accent', 0.005, 0.005, up + 0.1, tuple(mid), rot, verts=6))
+            tip = base + aax * up
+            # fletching: feather taper just under the nock
+            parts.append(cone(army, 'accent', 0.015, 0.052, tuple(tip - aax * 0.034), rot, verts=6))
+            parts.append(sphere(army, 'accent', 0.007, tuple(tip), seg=8, rings=6))
+        # strung bow resting against the left flank — lakshman's iconic pairing
+        bj, be, br = {}, [], {}
+        n = 7
+        for i in range(n):
+            t = i / (n - 1) * 2 - 1
+            bj[f'v{i}'] = (-0.105 - (1 - t * t) * 0.052, 0.10 + t * 0.02, 0.51 + t * 0.21)
+            br[f'v{i}'] = 0.011 - abs(t) * 0.005
+            if i:
+                be.append((f'v{i - 1}', f'v{i}'))
+        parts.append(skin_figure(army, 'accent', bj, be, br, 'v3', levels=1))
+        parts.append(cyl(army, 'accent', 0.0035, 0.0035, 0.421, (-0.105, 0.10, 0.51), (-0.095, 0, 0), verts=6))
     else:
         # indrajit's serpent coiled around the neck, hood raised by the cheek
         parts.append(torus(army, 'accent', 0.098, 0.02, (0, 0.0, 0.42), (0.2, 0, 0), maj_seg=24))
@@ -435,10 +474,12 @@ def build_bishop(army):
         parts.append(sphere(army, 'main', 0.034, (0, -0.07, 0.775), seg=12, rings=8))  # muzzle
         parts.append(torus(army, 'accent', 0.068, 0.013, (0, 0, 0.845)))  # crown band
         parts.append(cone(army, 'accent', 0.035, 0.07, (0, 0, 0.895), verts=12))
-        # gada in the raised left hand
+        # gada in the raised left hand, finial crowned with a flame tip —
+        # a nod to the burning of Lanka
         parts.append(cyl(army, 'accent', 0.016, 0.02, 0.24, (0.19, -0.02, 0.98), (0, 0.12, 0), verts=10))
         parts.append(sphere(army, 'accent', 0.07, (0.205, -0.02, 1.12)))
         parts.append(cone(army, 'accent', 0.024, 0.055, (0.21, -0.02, 1.2), verts=10))
+        parts.append(sphere(army, 'accent', 0.017, (0.211, -0.02, 1.245), scale=(0.75, 0.75, 1.5), seg=10, rings=8))
         # tail: high arc behind, curling forward over the head
         tail = skin_figure(army, 'main', {
             't0': (0, 0.12, 0.14), 't1': (0, 0.2, 0.45), 't2': (0, 0.17, 0.78),
@@ -488,6 +529,15 @@ def build_queen(army):
                               (math.cos(a) * 0.05, math.sin(a) * 0.05, 1.0),
                               (math.sin(a) * 0.35, -math.cos(a) * 0.35, 0), verts=8))
         parts.append(sphere(army, 'accent', 0.02, (0, 0, 1.03), seg=10, rings=8))
+        # lotus blossom cradled at the joined hands. The figure object sits at
+        # location.z = 0.1, so world hand height is the joint's 0.56 + 0.1 —
+        # raw parts like this one must use world coords.
+        parts.append(sphere(army, 'accent', 0.028, (0, -0.13, 0.662), scale=(1, 1, 0.75), seg=12, rings=8))
+        for i in range(6):
+            a = i / 6 * math.pi * 2
+            parts.append(cone(army, 'accent', 0.012, 0.045,
+                              (math.cos(a) * 0.026, -0.13 + math.sin(a) * 0.026, 0.684),
+                              (math.sin(a) * 0.55, -math.cos(a) * 0.55, 0), verts=6))
         # braid down the back
         braid = skin_figure(army, 'main', {
             'b0': (0, 0.075, 0.88), 'b1': (0, 0.1, 0.6), 'b2': (0, 0.09, 0.36),
@@ -531,6 +581,10 @@ def build_king(army):
         parts.extend(bow(army, 0.16, 0.64, 0.8))
         parts.append(torus(army, 'accent', 0.07, 0.011, (0, -0.01, 0.9)))   # necklace
         parts.append(torus(army, 'accent', 0.085, 0.012, (0, 0, 0.52)))     # sash
+        # prabhavali: slim golden halo ring behind the crown, flame finial on
+        # top — the classic temple-idol aura
+        parts.append(torus(army, 'accent', 0.155, 0.009, (0, 0.075, 1.05), (math.pi / 2, 0, 0), maj_seg=28))
+        parts.append(cone(army, 'accent', 0.014, 0.05, (0, 0.075, 1.235), verts=8))
         return finalize('k-ram', parts)
     # ravana: broad-shouldered demon king, fan of ten heads
     fig = humanoid(army, 'main', h=0.78, base_r=0.17, chest_r=0.115, arm_r=0.036,
@@ -538,12 +592,16 @@ def build_king(army):
     fig.location.z = 0.1
     parts.append(fig)
     parts.append(head_with(army, 0.98, 0.088))
-    # ten heads: two stacked tiers fanned behind the main head
-    for cnt, rr, zz, sr in ((5, 0.125, 0.97, 0.038), (3, 0.085, 1.055, 0.031)):
+    # ten heads: two stacked tiers fanned behind the main head (5 + 4 + the
+    # sculpted centre head = a true ten), each fan head wearing a small crown
+    for cnt, rr, zz, sr in ((5, 0.125, 0.97, 0.038), (4, 0.085, 1.055, 0.031)):
         for i in range(cnt):
             a = (i / (cnt - 1) - 0.5) * math.pi * 0.9
-            parts.append(sphere(army, 'main', sr,
-                                (math.sin(a) * rr, 0.08, zz), seg=10, rings=8))
+            hx = math.sin(a) * rr
+            parts.append(sphere(army, 'main', sr, (hx, 0.08, zz), seg=10, rings=8))
+            parts.append(cone(army, 'accent', sr * 0.55, sr * 0.9, (hx, 0.08, zz + sr * 1.1), verts=6))
+    # ember prabha arc ringing the head fan
+    parts.append(torus(army, 'accent', 0.165, 0.008, (0, 0.115, 1.01), (math.pi / 2, 0, 0), maj_seg=28))
     # tiered central crown
     parts.append(torus(army, 'accent', 0.075, 0.014, (0, 0, 1.05)))
     parts.append(cyl(army, 'accent', 0.062, 0.045, 0.06, (0, 0, 1.095), verts=12))

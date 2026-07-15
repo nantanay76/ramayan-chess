@@ -7,6 +7,7 @@ import { useGame } from '../store';
 import { Board, EdgeLabels } from './Board';
 import { Pieces } from './Pieces';
 import { Environment } from './Environment';
+import { StudioEnv } from './StudioEnv';
 
 /**
  * The cinematic camera never moves on its own during play — re-framed only
@@ -150,11 +151,15 @@ function BoardRig({ children }: { children: React.ReactNode }) {
 
 /** Best-effort real light-shafts anchored to the sun mesh Environment reports
  *  up via onSunMesh — falls back to just Bloom + Vignette until it mounts. */
-function Effects({ sunMesh, resolutionScale }: { sunMesh: THREE.Mesh | null; resolutionScale: number }) {
+function Effects({ sunMesh, resolutionScale, godRaySamples }: {
+  sunMesh: THREE.Mesh | null;
+  resolutionScale: number;
+  godRaySamples: number;
+}) {
   const effects = useMemo(() => {
     const list = [
       <Bloom key="bloom" luminanceThreshold={0.55} luminanceSmoothing={0.25} intensity={0.5} mipmapBlur />,
-      sunMesh && (
+      godRaySamples > 0 && sunMesh && (
         <GodRays
           key="godrays"
           sun={sunMesh}
@@ -162,7 +167,7 @@ function Effects({ sunMesh, resolutionScale }: { sunMesh: THREE.Mesh | null; res
           decay={0.9}
           weight={0.35}
           exposure={0.27}
-          samples={30}
+          samples={godRaySamples}
           resolutionScale={0.5}
           clampMax={1}
           blur
@@ -171,7 +176,7 @@ function Effects({ sunMesh, resolutionScale }: { sunMesh: THREE.Mesh | null; res
       <Vignette key="vignette" eskil={false} offset={0.18} darkness={0.65} />,
     ].filter(Boolean) as ReactElement[];
     return list;
-  }, [sunMesh]);
+  }, [sunMesh, godRaySamples]);
 
   return (
     // resolutionScale keeps the (expensive) post-processing passes cheap on
@@ -187,19 +192,37 @@ function Effects({ sunMesh, resolutionScale }: { sunMesh: THREE.Mesh | null; res
 interface QualityTier {
   dprCap: number;
   shadows: 'soft' | 'percentage' | 'basic';
+  /** false = skip the shadow pass entirely (the light stops casting). */
+  castShadow: boolean;
   shadowMapSize: number;
+  /** false = no EffectComposer at all — scene renders straight to canvas. */
+  composer: boolean;
   postScale: number;
+  /** 0 = drop the GodRays pass (the heaviest effect). */
+  godRaySamples: number;
+  oceanSegments: number;
+  sunLayers: number;
 }
 
 const QUALITY_TIERS: QualityTier[] = [
-  { dprCap: 1.5, shadows: 'soft', shadowMapSize: 1024, postScale: 1 },
-  { dprCap: 1.25, shadows: 'percentage', shadowMapSize: 1024, postScale: 0.75 },
-  { dprCap: 1, shadows: 'basic', shadowMapSize: 512, postScale: 0.5 },
+  { dprCap: 1.5, shadows: 'soft', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 1, godRaySamples: 30, oceanSegments: 110, sunLayers: 4 },
+  { dprCap: 1.25, shadows: 'percentage', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 0.75, godRaySamples: 20, oceanSegments: 110, sunLayers: 4 },
+  { dprCap: 1, shadows: 'basic', castShadow: true, shadowMapSize: 512, composer: true, postScale: 0.5, godRaySamples: 0, oceanSegments: 64, sunLayers: 2 },
+  { dprCap: 1, shadows: 'basic', castShadow: false, shadowMapSize: 256, composer: false, postScale: 0.5, godRaySamples: 0, oceanSegments: 48, sunLayers: 2 },
 ];
+
+/** Phones start one notch down and let PerformanceMonitor climb back up —
+ *  cheaper than burning the first seconds at full quality on a weak GPU. */
+function initialTier(): number {
+  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  type UAData = { userAgentData?: { mobile?: boolean } };
+  const uaMobile = (navigator as UAData).userAgentData?.mobile === true;
+  return coarse || uaMobile ? 2 : 0;
+}
 
 /** Shadow map only reallocates when light.shadow.map is null — three.js
  *  won't resize an already-allocated map just because shadow-mapSize changed. */
-function ShadowSun({ mapSize }: { mapSize: number }) {
+function ShadowSun({ mapSize, castShadow }: { mapSize: number; castShadow: boolean }) {
   const ref = useRef<THREE.DirectionalLight>(null);
   useEffect(() => {
     const light = ref.current;
@@ -213,7 +236,7 @@ function ShadowSun({ mapSize }: { mapSize: number }) {
       position={[6, 12, 5]}
       intensity={1.5}
       color="#ffe3c2"
-      castShadow
+      castShadow={castShadow}
       shadow-mapSize={[mapSize, mapSize]}
       shadow-camera-left={-7}
       shadow-camera-right={7}
@@ -225,10 +248,28 @@ function ShadowSun({ mapSize }: { mapSize: number }) {
   );
 }
 
+/** Dev-only: window.__perf() → draw calls/triangles, window.__setTier(n|null)
+ *  → pin a quality tier, for before/after measurements in tests. */
+function PerfProbe({ forceTier }: { forceTier: (t: number | null) => void }) {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as Record<string, unknown>;
+    w.__perf = () => ({ ...gl.info.render, programs: gl.info.programs?.length ?? 0 });
+    w.__setTier = forceTier;
+    return () => {
+      delete w.__perf;
+      delete w.__setTier;
+    };
+  }, [gl, forceTier]);
+  return null;
+}
+
 export function Scene() {
   const clearSelection = useGame((s) => s.clearSelection);
-  const [qualityTier, setQualityTier] = useState(0);
-  const tier = QUALITY_TIERS[qualityTier];
+  const [qualityTier, setQualityTier] = useState(initialTier);
+  const [forcedTier, setForcedTier] = useState<number | null>(null);
+  const tier = QUALITY_TIERS[forcedTier ?? qualityTier];
   const dpr = Math.min(tier.dprCap, window.devicePixelRatio);
   const [sunMesh, setSunMesh] = useState<THREE.Mesh | null>(null);
   // PerformanceMonitor's first sample window would otherwise land squarely on
@@ -246,10 +287,14 @@ export function Scene() {
       <Canvas
         shadows={tier.shadows}
         dpr={dpr}
+        // hybrid-GPU laptops otherwise often hand WebGL to the integrated GPU
+        gl={{ powerPreference: 'high-performance' }}
         camera={{ position: [0, 7.4, 8.8], fov: 42 }}
         onPointerMissed={clearSelection}
       >
-        {monitorReady && (
+        <PerfProbe forceTier={setForcedTier} />
+        <StudioEnv intensity={0.45} />
+        {monitorReady && forcedTier === null && (
           // flipflops/onFallback are intentionally left at their drei
           // defaults (Infinity/unused): the default lets the monitor keep
           // adapting for the whole session. Passing flipflops permanently
@@ -262,20 +307,23 @@ export function Scene() {
         )}
         <CameraRig />
         <fog attach="fog" args={['#241536', 30, 120]} />
-        <ambientLight intensity={0.55} color="#ffd9b0" />
-        <ShadowSun mapSize={tier.shadowMapSize} />
+        {/* dropped from 0.55 when StudioEnv IBL was added — combined they wash out */}
+        <ambientLight intensity={0.42} color="#ffd9b0" />
+        <ShadowSun mapSize={tier.shadowMapSize} castShadow={tier.castShadow} />
         <directionalLight position={[-8, 6, -6]} intensity={0.4} color="#7d9bff" />
         {/* environment rides the rig too: Lanka rises behind the demon army,
             the mainland shore behind Ram's — whichever side you play */}
         <BoardRig>
-          <Environment onSunMesh={setSunMesh} />
+          <Environment onSunMesh={setSunMesh} oceanSegments={tier.oceanSegments} sunLayers={tier.sunLayers} />
           <Board />
           <Suspense fallback={null}>
             <Pieces />
           </Suspense>
         </BoardRig>
         <EdgeLabels />
-        <Effects sunMesh={sunMesh} resolutionScale={tier.postScale} />
+        {tier.composer && (
+          <Effects sunMesh={sunMesh} resolutionScale={tier.postScale} godRaySamples={tier.godRaySamples} />
+        )}
       </Canvas>
     </div>
   );

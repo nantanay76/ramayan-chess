@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 
-/** Shared materials — one instance each, reused by every mesh. */
+/** Shared materials — one instance each, reused by every mesh.
+ *  envMapIntensity balances against StudioEnv's scene-wide IBL: metals drink
+ *  deep from the env map (that's where the gleam lives), stone sips. */
 
 // Ram's army: ivory sandstone with warm gold
 export const ramMain = new THREE.MeshStandardMaterial({
   color: '#f0e3c6',
   roughness: 0.3,
   metalness: 0.06,
+  envMapIntensity: 0.7,
 });
 export const ramAccent = new THREE.MeshStandardMaterial({
   color: '#e3a83d',
@@ -14,6 +17,7 @@ export const ramAccent = new THREE.MeshStandardMaterial({
   metalness: 0.9,
   emissive: '#452c05',
   emissiveIntensity: 0.35,
+  envMapIntensity: 1.4,
 });
 
 // Lanka's army: dark obsidian-bronze with ember glow
@@ -21,6 +25,7 @@ export const lankaMain = new THREE.MeshStandardMaterial({
   color: '#3a3244',
   roughness: 0.38,
   metalness: 0.5,
+  envMapIntensity: 0.9,
 });
 export const lankaAccent = new THREE.MeshStandardMaterial({
   color: '#8a4a20',
@@ -28,20 +33,22 @@ export const lankaAccent = new THREE.MeshStandardMaterial({
   metalness: 0.85,
   emissive: '#ff5a00',
   emissiveIntensity: 0.2,
+  envMapIntensity: 1.3,
 });
 
 // Board: warm temple sandstone
-export const boardLight = new THREE.MeshStandardMaterial({ color: '#dcc39a', roughness: 0.75, metalness: 0.05 });
-export const boardDark = new THREE.MeshStandardMaterial({ color: '#78462f', roughness: 0.75, metalness: 0.05 });
-export const borderMat = new THREE.MeshStandardMaterial({ color: '#54301f', roughness: 0.7, metalness: 0.1 });
+export const boardLight = new THREE.MeshStandardMaterial({ color: '#dcc39a', roughness: 0.75, metalness: 0.05, envMapIntensity: 0.4 });
+export const boardDark = new THREE.MeshStandardMaterial({ color: '#78462f', roughness: 0.75, metalness: 0.05, envMapIntensity: 0.4 });
+export const borderMat = new THREE.MeshStandardMaterial({ color: '#54301f', roughness: 0.7, metalness: 0.1, envMapIntensity: 0.4 });
 export const goldTrim = new THREE.MeshStandardMaterial({
   color: '#c9972f',
   roughness: 0.3,
   metalness: 0.9,
   emissive: '#3a2703',
   emissiveIntensity: 0.4,
+  envMapIntensity: 1.3,
 });
-export const pillarMat = new THREE.MeshStandardMaterial({ color: '#6b4028', roughness: 0.65, metalness: 0.1 });
+export const pillarMat = new THREE.MeshStandardMaterial({ color: '#6b4028', roughness: 0.65, metalness: 0.1, envMapIntensity: 0.5 });
 
 // Highlights
 export const selectMat = new THREE.MeshBasicMaterial({

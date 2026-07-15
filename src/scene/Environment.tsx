@@ -176,11 +176,29 @@ const oceanShader = new THREE.ShaderMaterial({
 const sunDiscGeo = new THREE.CircleGeometry(2.4, 24);
 const sunDiscMat = new THREE.MeshBasicMaterial({ color: '#fff3d6', fog: false, toneMapped: false });
 
-function Ocean({ onSunMesh }: { onSunMesh?: (m: THREE.Mesh | null) => void }) {
+const SUN_GLOW_LAYERS = [
+  { size: 14, opacity: 1 },
+  { size: 26, opacity: 0.95 },
+  { size: 46, opacity: 0.4 },
+  { size: 76, opacity: 0.16 },
+];
+// low-tier devices keep the readable core + one halo — the 46/76-unit
+// additive layers are pure fill-rate cost on portrait phones
+const SUN_GLOW_LAYERS_LITE = [
+  { size: 14, opacity: 1 },
+  { size: 46, opacity: 0.5 },
+];
+
+function Ocean({ onSunMesh, segments, sunLayers }: {
+  onSunMesh?: (m: THREE.Mesh | null) => void;
+  segments: number;
+  sunLayers: number;
+}) {
   const sunRef = useRef<THREE.Group>(null);
   const discRef = useRef<THREE.Mesh>(null);
   const sunWorld = useMemo(() => new THREE.Vector3(), []);
   const sunTex = useMemo(sunTexture, []);
+  const glowLayers = sunLayers >= SUN_GLOW_LAYERS.length ? SUN_GLOW_LAYERS : SUN_GLOW_LAYERS_LITE;
 
   useFrame(({ clock, camera }) => {
     oceanShader.uniforms.uTime.value = clock.elapsedTime;
@@ -195,17 +213,12 @@ function Ocean({ onSunMesh }: { onSunMesh?: (m: THREE.Mesh | null) => void }) {
   return (
     <group>
       <mesh material={oceanShader} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.4, 0]} raycast={noRaycast}>
-        <planeGeometry args={[170, 170, 110, 110]} />
+        <planeGeometry args={[170, 170, segments, segments]} />
       </mesh>
       {/* dusk sun low on the horizon — camera-facing glow layers (sprites,
           so the disc always reads as round instead of edge-on-ing into a streak) */}
       <group ref={sunRef} position={SUN_POS}>
-        {[
-          { size: 14, opacity: 1 },
-          { size: 26, opacity: 0.95 },
-          { size: 46, opacity: 0.4 },
-          { size: 76, opacity: 0.16 },
-        ].map((l, i) => (
+        {glowLayers.map((l, i) => (
           <sprite key={i} scale={[l.size, l.size, 1]} raycast={noRaycast}>
             <spriteMaterial
               map={sunTex}
@@ -473,14 +486,18 @@ function FloatingDiyas() {
 
 // ---------------------------------------------------------------- assembly
 
-export function Environment({ onSunMesh }: { onSunMesh?: (m: THREE.Mesh | null) => void }) {
+export function Environment({ onSunMesh, oceanSegments = 110, sunLayers = 4 }: {
+  onSunMesh?: (m: THREE.Mesh | null) => void;
+  oceanSegments?: number;
+  sunLayers?: number;
+}) {
   return (
     <group>
       <mesh material={skyMat} raycast={noRaycast}>
         <sphereGeometry args={[70, 32, 20]} />
       </mesh>
       <Stars radius={55} depth={25} count={1200} factor={3} saturation={0} fade speed={0.4} />
-      <Ocean onSunMesh={onSunMesh} />
+      <Ocean onSunMesh={onSunMesh} segments={oceanSegments} sunLayers={sunLayers} />
       <LankaIsland />
       <MainlandShore />
       <RamSetu />

@@ -4,6 +4,7 @@ import { Menu } from './ui/Menu';
 import { HUD } from './ui/HUD';
 import { PromotionPicker } from './ui/PromotionPicker';
 import { GameOverModal } from './ui/GameOverModal';
+import { LoadingVeil } from './ui/LoadingVeil';
 
 export default function App() {
   const screen = useGame((s) => s.screen);
@@ -13,6 +14,7 @@ export default function App() {
   return (
     <div className="game-root">
       <Scene />
+      <LoadingVeil />
       <HUD />
       <PromotionPicker />
       <GameOverModal />
