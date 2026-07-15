@@ -3,6 +3,7 @@ import type { Color } from 'chess.js';
 import { useGame } from '../store';
 import { ARMY, CHARACTERS, PIECE_GLYPH } from '../game/characters';
 import { InspectModal } from './InspectModal';
+import { SettingsMenu } from './Settings';
 
 export function HUD() {
   const turn = useGame((s) => s.turn);
@@ -84,6 +85,7 @@ export function HUD() {
           <button className="btn small icon" onClick={toggleTopDownView} title="Top-down view">
             {topDownView ? '⬇' : '🎥'}
           </button>
+          <SettingsMenu />
           <button className="btn small icon panel-toggle" onClick={() => setPanelOpen((v) => !v)} title="Battle scroll">
             📜
           </button>

@@ -1,21 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useProgress } from '@react-three/drei';
+import { useGame } from '../store';
 
 /**
  * Themed cover over the scene while the piece models load, so statues don't
- * pop into an already-live battlefield. Starts pre-dismissed when assets are
- * already in memory (returning from the menu mid-session) — the veil is for
- * real loads, not a mandatory splash.
+ * pop into an already-live battlefield.
+ *
+ * Dismissal waits on BOTH the GLB load finishing AND the scene warming up
+ * (sceneReady, set by StartupFade once shaders are compiled and exposure has
+ * faded in) — so the cold-start hitch stays hidden behind the veil and the
+ * reveal reads as a curtain rising, not a bright flash. The veil always starts
+ * visible: leaving to the menu unmounts the Canvas, so every game start spins up
+ * a fresh WebGL context that has to recompile shaders — a "cached assets" shortcut
+ * would just expose that recompile as the very flash we're removing.
  */
 export function LoadingVeil() {
   const active = useProgress((s) => s.active);
   const progress = useProgress((s) => s.progress);
-  const [gone, setGone] = useState(() => {
-    const s = useProgress.getState();
-    return !s.active && s.progress >= 100;
-  });
+  const sceneReady = useGame((s) => s.sceneReady);
+  const [gone, setGone] = useState(false);
 
-  const done = !active && progress >= 100;
+  const done = !active && progress >= 100 && sceneReady;
 
   useEffect(() => {
     if (!done) return;

@@ -26,3 +26,6 @@ dist-ssr
 
 .vercel
 .env*
+
+# stray nested clone that lives alongside the project — never part of this repo
+Ramayan-chess-/

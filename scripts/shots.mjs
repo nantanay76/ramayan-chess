@@ -29,7 +29,10 @@ await page.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
 await page.screenshot({ path: OUT + 's1-menu.png' });
 
 await page.evaluate(() => window.__game.getState().startGame('local', 0, 'w'));
-await page.waitForTimeout(4000);
+// wait out the loading veil (it now holds until the scene is warmed up) before
+// shooting, so the board — not the veil — is captured on slow (software) GPUs
+await page.waitForFunction(() => !document.querySelector('.loading-veil'), null, { timeout: 40000 }).catch(() => {});
+await page.waitForTimeout(1500);
 await page.screenshot({ path: OUT + 's2-board.png' });
 
 // select a piece to see highlights
@@ -56,7 +59,8 @@ await p2.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
 await p2.goto(URL, { waitUntil: 'domcontentloaded' });
 await p2.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
 await p2.evaluate(() => window.__game.getState().startGame('local', 0, 'w'));
-await p2.waitForTimeout(4000);
+await p2.waitForFunction(() => !document.querySelector('.loading-veil'), null, { timeout: 40000 }).catch(() => {});
+await p2.waitForTimeout(1500);
 await p2.screenshot({ path: OUT + 's6-portrait.png' });
 await b2.close();
 console.log('DONE');

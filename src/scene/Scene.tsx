@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, Bloom, GodRays, Vignette } from '@react-three/postprocessing';
-import { useGame } from '../store';
+import { useGame, type GraphicsPref } from '../store';
 import { Board, EdgeLabels } from './Board';
 import { Pieces } from './Pieces';
 import { Environment } from './Environment';
@@ -151,10 +151,11 @@ function BoardRig({ children }: { children: React.ReactNode }) {
 
 /** Best-effort real light-shafts anchored to the sun mesh Environment reports
  *  up via onSunMesh — falls back to just Bloom + Vignette until it mounts. */
-function Effects({ sunMesh, resolutionScale, godRaySamples }: {
+function Effects({ sunMesh, resolutionScale, godRaySamples, msaa }: {
   sunMesh: THREE.Mesh | null;
   resolutionScale: number;
   godRaySamples: number;
+  msaa: number;
 }) {
   const effects = useMemo(() => {
     const list = [
@@ -183,7 +184,7 @@ function Effects({ sunMesh, resolutionScale, godRaySamples }: {
     // modest GPUs without softening the main 3D render, which stays at the
     // Canvas's own dpr — tied to the same quality tier as shadows/dpr so it
     // scales down with everything else instead of being a flat, permanent tax.
-    <EffectComposer multisampling={0} enableNormalPass={false} resolutionScale={resolutionScale}>
+    <EffectComposer multisampling={msaa} enableNormalPass={false} resolutionScale={resolutionScale}>
       {effects}
     </EffectComposer>
   );
@@ -202,14 +203,30 @@ interface QualityTier {
   godRaySamples: number;
   oceanSegments: number;
   sunLayers: number;
+  /** EffectComposer MSAA — only Ultra pays for it; edge cleanup on strong GPUs. */
+  msaa: number;
 }
 
+// index 0 is Ultra (opt-in only — the adaptive monitor never climbs into it);
+// 1..4 are the auto-adaptive range, high → potato.
 const QUALITY_TIERS: QualityTier[] = [
-  { dprCap: 1.5, shadows: 'soft', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 1, godRaySamples: 30, oceanSegments: 110, sunLayers: 4 },
-  { dprCap: 1.25, shadows: 'percentage', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 0.75, godRaySamples: 20, oceanSegments: 110, sunLayers: 4 },
-  { dprCap: 1, shadows: 'basic', castShadow: true, shadowMapSize: 512, composer: true, postScale: 0.5, godRaySamples: 0, oceanSegments: 64, sunLayers: 2 },
-  { dprCap: 1, shadows: 'basic', castShadow: false, shadowMapSize: 256, composer: false, postScale: 0.5, godRaySamples: 0, oceanSegments: 48, sunLayers: 2 },
+  { dprCap: 2, shadows: 'soft', castShadow: true, shadowMapSize: 2048, composer: true, postScale: 1, godRaySamples: 40, oceanSegments: 128, sunLayers: 4, msaa: 4 },
+  { dprCap: 1.5, shadows: 'soft', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 1, godRaySamples: 30, oceanSegments: 110, sunLayers: 4, msaa: 0 },
+  { dprCap: 1.25, shadows: 'percentage', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 0.75, godRaySamples: 20, oceanSegments: 110, sunLayers: 4, msaa: 0 },
+  { dprCap: 1, shadows: 'basic', castShadow: true, shadowMapSize: 512, composer: true, postScale: 0.5, godRaySamples: 0, oceanSegments: 64, sunLayers: 2, msaa: 0 },
+  { dprCap: 1, shadows: 'basic', castShadow: false, shadowMapSize: 256, composer: false, postScale: 0.5, godRaySamples: 0, oceanSegments: 48, sunLayers: 2, msaa: 0 },
 ];
+
+/** Named user presets → fixed tier index. 'auto' has no entry (stays adaptive). */
+const PRESET_TIER: Record<Exclude<GraphicsPref, 'auto'>, number> = {
+  ultra: 0,
+  high: 1,
+  balanced: 2,
+  performance: 3,
+};
+
+/** Auto mode floor — Ultra (0) is opt-in only, so adaptive quality tops out at High. */
+const AUTO_MIN_TIER = 1;
 
 /** Phones start one notch down and let PerformanceMonitor climb back up —
  *  cheaper than burning the first seconds at full quality on a weak GPU. */
@@ -217,7 +234,7 @@ function initialTier(): number {
   const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   type UAData = { userAgentData?: { mobile?: boolean } };
   const uaMobile = (navigator as UAData).userAgentData?.mobile === true;
-  return coarse || uaMobile ? 2 : 0;
+  return coarse || uaMobile ? 3 : AUTO_MIN_TIER;
 }
 
 /** Shadow map only reallocates when light.shadow.map is null — three.js
@@ -265,11 +282,57 @@ function PerfProbe({ forceTier }: { forceTier: (t: number | null) => void }) {
   return null;
 }
 
+/**
+ * Ramps tone-mapping exposure up from black on mount, then reports the scene
+ * warmed via onReady. Two jobs: (1) the first couple of frames — where the
+ * one-time shader compile and IBL upload land — are spent black; (2) onReady
+ * gates the veil's dismissal on real warm-up, not just GLB load progress, so
+ * the whole cold-start hitch stays hidden behind the veil and what used to be
+ * a flash the instant it lifted is now a clean curtain-rise.
+ */
+function StartupFade({ onReady }: { onReady: () => void }) {
+  const gl = useThree((s) => s.gl);
+  const st = useRef({ frame: 0, elapsed: 0, done: false });
+
+  useEffect(() => {
+    gl.toneMappingExposure = 0;
+    st.current = { frame: 0, elapsed: 0, done: false };
+    return () => {
+      gl.toneMappingExposure = 1;
+    };
+  }, [gl]);
+
+  useFrame((_, dt) => {
+    const s = st.current;
+    if (s.done) return;
+    // spend the first couple of frames black so the compile hitch / IBL upload
+    // land before anything is visible, then ease exposure up over ~0.7s
+    if (s.frame < 2) {
+      s.frame++;
+      return;
+    }
+    s.elapsed += dt;
+    const t = Math.min(1, s.elapsed / 0.7);
+    gl.toneMappingExposure = easeInOutCubic(t);
+    if (t >= 1) {
+      s.done = true;
+      gl.toneMappingExposure = 1;
+      onReady();
+    }
+  });
+
+  return null;
+}
+
 export function Scene() {
   const clearSelection = useGame((s) => s.clearSelection);
+  const graphicsPref = useGame((s) => s.graphicsPref);
+  const setSceneReady = useGame((s) => s.setSceneReady);
   const [qualityTier, setQualityTier] = useState(initialTier);
   const [forcedTier, setForcedTier] = useState<number | null>(null);
-  const tier = QUALITY_TIERS[forcedTier ?? qualityTier];
+  const presetTier = graphicsPref === 'auto' ? null : PRESET_TIER[graphicsPref];
+  const isAuto = presetTier === null;
+  const tier = QUALITY_TIERS[forcedTier ?? presetTier ?? qualityTier];
   const dpr = Math.min(tier.dprCap, window.devicePixelRatio);
   const [sunMesh, setSunMesh] = useState<THREE.Mesh | null>(null);
   // PerformanceMonitor's first sample window would otherwise land squarely on
@@ -282,6 +345,11 @@ export function Scene() {
     return () => clearTimeout(id);
   }, []);
 
+  // re-gate the veil each time the scene mounts (also on returning from the menu)
+  useEffect(() => {
+    setSceneReady(false);
+  }, [setSceneReady]);
+
   return (
     <div className="scene-wrap">
       <Canvas
@@ -293,15 +361,18 @@ export function Scene() {
         onPointerMissed={clearSelection}
       >
         <PerfProbe forceTier={setForcedTier} />
+        <StartupFade onReady={() => setSceneReady(true)} />
         <StudioEnv intensity={0.45} />
-        {monitorReady && forcedTier === null && (
+        {/* the adaptive monitor only runs in Auto mode; a fixed preset must
+            never auto-flip tiers (that would be a visible mid-game stutter) */}
+        {isAuto && monitorReady && forcedTier === null && (
           // flipflops/onFallback are intentionally left at their drei
           // defaults (Infinity/unused): the default lets the monitor keep
           // adapting for the whole session. Passing flipflops permanently
           // freezes quality at whatever tier is active once enough
           // adjustments happen, with no way back — that was the bug.
           <PerformanceMonitor
-            onIncline={() => setQualityTier((t) => Math.max(0, t - 1))}
+            onIncline={() => setQualityTier((t) => Math.max(AUTO_MIN_TIER, t - 1))}
             onDecline={() => setQualityTier((t) => Math.min(QUALITY_TIERS.length - 1, t + 1))}
           />
         )}
@@ -322,7 +393,12 @@ export function Scene() {
         </BoardRig>
         <EdgeLabels />
         {tier.composer && (
-          <Effects sunMesh={sunMesh} resolutionScale={tier.postScale} godRaySamples={tier.godRaySamples} />
+          <Effects
+            sunMesh={sunMesh}
+            resolutionScale={tier.postScale}
+            godRaySamples={tier.godRaySamples}
+            msaa={tier.msaa}
+          />
         )}
       </Canvas>
     </div>

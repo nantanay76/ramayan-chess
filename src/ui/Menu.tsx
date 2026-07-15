@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Color } from 'chess.js';
 import { useGame, type Mode } from '../store';
 import { LEVELS } from '../engine/difficulty';
+import { GraphicsPicker } from './Settings';
 
 export function Menu() {
   const startGame = useGame((s) => s.startGame);
@@ -73,6 +74,9 @@ export function Menu() {
             Two warriors, one board. Shri Ram's army moves first — pass the device between moves.
           </p>
         )}
+
+        <p className="section-label">Graphics</p>
+        <GraphicsPicker />
 
         <button className="start-btn" onClick={() => startGame(mode, levelIdx, color)}>
           Begin the Battle

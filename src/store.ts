@@ -8,10 +8,25 @@ import { playSound, playCaptureVoice, setSoundEnabled, startMusic, stopMusic } f
 
 export type Mode = 'ai' | 'local';
 export type Screen = 'menu' | 'game';
+/** 'auto' = adaptive PerformanceMonitor; the rest pin a fixed quality tier. */
+export type GraphicsPref = 'auto' | 'ultra' | 'high' | 'balanced' | 'performance';
 
 const game = new ChessGame();
 /** Bumped to invalidate any in-flight AI search (undo, new game, menu…). */
 let aiToken = 0;
+
+const GRAPHICS_KEY = 'rc:graphics';
+function loadGraphicsPref(): GraphicsPref {
+  try {
+    const v = localStorage.getItem(GRAPHICS_KEY);
+    if (v === 'auto' || v === 'ultra' || v === 'high' || v === 'balanced' || v === 'performance') {
+      return v;
+    }
+  } catch {
+    // localStorage may be unavailable (private mode) — fall through to default
+  }
+  return 'auto';
+}
 
 interface BoardSnapshot {
   fen: string;
@@ -57,6 +72,10 @@ export interface GameStore extends BoardSnapshot {
   topDownView: boolean;
   soundOn: boolean;
   musicOn: boolean;
+  graphicsPref: GraphicsPref;
+  /** true once the scene has warmed up (shaders compiled + exposure faded in) —
+   *  the loading veil waits on this so the cold-start hitch stays hidden. */
+  sceneReady: boolean;
   engineError: string | null;
 
   startGame(mode: Mode, levelIdx: number, playerColor: Color): void;
@@ -71,6 +90,8 @@ export interface GameStore extends BoardSnapshot {
   toggleTopDownView(): void;
   toggleSound(): void;
   toggleMusic(): void;
+  setGraphicsPref(pref: GraphicsPref): void;
+  setSceneReady(ready: boolean): void;
 }
 
 export const useGame = create<GameStore>((set, get) => {
@@ -147,6 +168,8 @@ export const useGame = create<GameStore>((set, get) => {
     topDownView: false,
     soundOn: true,
     musicOn: false,
+    graphicsPref: loadGraphicsPref(),
+    sceneReady: false,
     engineError: null,
 
     startGame(mode, levelIdx, playerColor) {
@@ -284,6 +307,19 @@ export const useGame = create<GameStore>((set, get) => {
       if (on) startMusic();
       else stopMusic();
       set({ musicOn: on });
+    },
+
+    setGraphicsPref(pref) {
+      try {
+        localStorage.setItem(GRAPHICS_KEY, pref);
+      } catch {
+        // best-effort persistence — a failed write just means it won't survive reload
+      }
+      set({ graphicsPref: pref });
+    },
+
+    setSceneReady(ready) {
+      if (get().sceneReady !== ready) set({ sceneReady: ready });
     },
   };
 });
