@@ -12,18 +12,30 @@ export interface SearchResult {
 
 type LineListener = (line: string) => void;
 
-const ENGINE_PATH = `${import.meta.env.BASE_URL}stockfish/stockfish-18-lite-single.js`;
+/** The single-threaded lite build — the safe default, needs no special headers. */
+export const SINGLE_THREAD_ENGINE = 'stockfish-18-lite-single.js';
+/** The multi-threaded lite build — needs cross-origin isolation (SharedArrayBuffer). */
+export const MULTI_THREAD_ENGINE = 'stockfish-18-lite.js';
 
 /** Minimal UCI driver for a Stockfish Web Worker. */
 export class UciEngine {
   private worker: Worker | null = null;
   private listeners = new Set<LineListener>();
   private initPromise: Promise<void> | null = null;
+  /** Serialises searches on this worker — UCI is one `go`…`bestmove` at a time,
+   *  so overlapping searches would interleave `info` lines and corrupt both. */
+  private queue: Promise<unknown> = Promise.resolve();
+
+  private file: string;
+
+  constructor(file: string = SINGLE_THREAD_ENGINE) {
+    this.file = file;
+  }
 
   init(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = (async () => {
-        this.worker = new Worker(ENGINE_PATH);
+        this.worker = new Worker(`${import.meta.env.BASE_URL}stockfish/${this.file}`);
         this.worker.onmessage = (e: MessageEvent) => {
           const line = typeof e.data === 'string' ? e.data : '';
           for (const listener of [...this.listeners]) listener(line);
@@ -42,6 +54,15 @@ export class UciEngine {
 
   stop(): void {
     this.send('stop');
+  }
+
+  /** Tear down the worker so a fresh one can be built (e.g. switching binaries). */
+  terminate(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    this.initPromise = null;
+    this.listeners.clear();
+    this.queue = Promise.resolve();
   }
 
   async isReady(): Promise<void> {
@@ -80,9 +101,17 @@ export class UciEngine {
 
   /**
    * Run a search and collect the deepest info line per MultiPV slot so weak
-   * levels can choose among ranked candidate moves.
+   * levels can choose among ranked candidate moves. Serialised per worker.
    */
-  async search(fen: string, go: string): Promise<SearchResult> {
+  search(fen: string, go: string): Promise<SearchResult> {
+    const task = () => this.runSearch(fen, go);
+    const result = this.queue.then(task, task);
+    // keep the chain alive whether or not an individual search rejects
+    this.queue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async runSearch(fen: string, go: string): Promise<SearchResult> {
     const byMultipv = new Map<number, { depth: number; move: string; score: number }>();
 
     const infoListener: LineListener = (line) => {

@@ -25,6 +25,21 @@ export interface Level {
   randomChance?: number;
 }
 
+/**
+ * The temperament the AI plays with. Not a strength dial — among moves the
+ * engine already rates as near-best, an `aggressive` army reaches for captures,
+ * checks and king-hunts, while a `classical` army keeps it sound and principled.
+ */
+export type Style = 'aggressive' | 'classical' | 'balanced';
+
+/**
+ * Ravana's army (black) fights ferociously; Shri Ram's army (white) fights with
+ * dharmic restraint. The AI's temperament follows the army it commands.
+ */
+export function armyStyle(aiColor: 'w' | 'b'): Style {
+  return aiColor === 'b' ? 'aggressive' : 'classical';
+}
+
 export const LEVELS: Level[] = [
   { elo: 500, rank: 'Shishya', rankHi: 'शिष्य', tagline: 'A young student of the game', kind: 'blunder', depth: 2, skill: 0, multipv: 6, temperature: 350, randomChance: 0.15 },
   { elo: 800, rank: 'Sainik', rankHi: 'सैनिक', tagline: 'A foot-soldier of the vanar sena', kind: 'blunder', depth: 3, skill: 1, multipv: 5, temperature: 220, randomChance: 0.06 },

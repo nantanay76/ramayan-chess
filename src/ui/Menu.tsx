@@ -2,13 +2,20 @@ import { useState } from 'react';
 import type { Color } from 'chess.js';
 import { useGame, type Mode } from '../store';
 import { LEVELS } from '../engine/difficulty';
-import { GraphicsPicker } from './Settings';
+import { TIME_CONTROLS } from '../game/timeControls';
+import { playerRank } from '../game/profile';
+import { GraphicsPicker, EnginePowerPicker } from './Settings';
 
 export function Menu() {
   const startGame = useGame((s) => s.startGame);
+  const profile = useGame((s) => s.profile);
   const [mode, setMode] = useState<Mode>('ai');
   const [levelIdx, setLevelIdx] = useState(1);
   const [color, setColor] = useState<Color>('w');
+  const [tcIdx, setTcIdx] = useState(0);
+
+  const rank = playerRank(profile.rating);
+  const played = profile.wins + profile.losses + profile.draws;
 
   return (
     <div className="menu">
@@ -19,6 +26,25 @@ export function Menu() {
         <p className="menu-tagline">
           The eternal war of dharma — fought on the board where chess itself was born.
         </p>
+
+        {played > 0 && (
+          <div className="profile-strip">
+            <div className="ps-rank">
+              <span className="ps-rank-hi">{rank.rankHi}</span>
+              <span className="ps-rank-en">{rank.rank}</span>
+            </div>
+            <div className="ps-rating">
+              <b>{profile.rating}</b>
+              <small>rating</small>
+            </div>
+            <div className="ps-record">
+              <span>
+                {profile.wins}<em>W</em> · {profile.losses}<em>L</em> · {profile.draws}<em>D</em>
+              </span>
+              {profile.streak > 1 && <span className="ps-streak">🔥 {profile.streak} win streak</span>}
+            </div>
+          </div>
+        )}
 
         <div className="mode-tabs">
           <button className={`tab ${mode === 'ai' ? 'active' : ''}`} onClick={() => setMode('ai')}>
@@ -33,18 +59,31 @@ export function Menu() {
           <>
             <p className="section-label">Choose your opponent's strength</p>
             <div className="level-grid">
-              {LEVELS.map((lvl, i) => (
-                <button
-                  key={lvl.elo}
-                  className={`chip ${i === levelIdx ? 'active' : ''}`}
-                  onClick={() => setLevelIdx(i)}
-                  title={lvl.tagline}
-                >
-                  <span className="chip-elo">{lvl.elo}</span>
-                  <span className="chip-rank">{lvl.rank}</span>
-                </button>
-              ))}
+              {LEVELS.map((lvl, i) => {
+                const conquered = i <= profile.highestConquered;
+                const isNext = i === profile.highestConquered + 1;
+                return (
+                  <button
+                    key={lvl.elo}
+                    className={`chip ${i === levelIdx ? 'active' : ''} ${conquered ? 'conquered' : ''} ${isNext ? 'next' : ''}`}
+                    onClick={() => setLevelIdx(i)}
+                    title={lvl.tagline}
+                  >
+                    {conquered && <span className="chip-crown" title="Conquered">👑</span>}
+                    <span className="chip-elo">{lvl.elo}</span>
+                    <span className="chip-rank">{lvl.rank}</span>
+                  </button>
+                );
+              })}
             </div>
+            {profile.highestConquered < LEVELS.length - 1 && (
+              <p className="conquest-hint">
+                ⚔ Next conquest: <b>{LEVELS[profile.highestConquered + 1].rank}</b> ({LEVELS[profile.highestConquered + 1].elo})
+              </p>
+            )}
+            {profile.highestConquered >= LEVELS.length - 1 && (
+              <p className="conquest-hint done">👑 You have conquered the entire ladder — even Brahmastra has fallen.</p>
+            )}
             <p className="level-tagline">
               <b>{LEVELS[levelIdx].rankHi}</b> — {LEVELS[levelIdx].tagline}
             </p>
@@ -75,10 +114,31 @@ export function Menu() {
           </p>
         )}
 
+        <p className="section-label">Time control</p>
+        <div className="tc-grid">
+          {TIME_CONTROLS.map((tc, i) => (
+            <button
+              key={tc.id}
+              className={`chip tc ${i === tcIdx ? 'active' : ''}`}
+              onClick={() => setTcIdx(i)}
+            >
+              <span className="chip-rank">{tc.label}</span>
+              <span className="chip-elo tc-sub">{tc.sub}</span>
+            </button>
+          ))}
+        </div>
+
+        {mode === 'ai' && (
+          <>
+            <p className="section-label">Engine strength</p>
+            <EnginePowerPicker />
+          </>
+        )}
+
         <p className="section-label">Graphics</p>
         <GraphicsPicker />
 
-        <button className="start-btn" onClick={() => startGame(mode, levelIdx, color)}>
+        <button className="start-btn" onClick={() => startGame(mode, levelIdx, color, TIME_CONTROLS[tcIdx])}>
           Begin the Battle
         </button>
 

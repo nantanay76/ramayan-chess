@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useGame, type GraphicsPref } from '../store';
+import { useGame, type GraphicsPref, type EnginePower } from '../store';
+import { maxEngineAvailable } from '../engine/ai';
 
 interface Preset {
   id: GraphicsPref;
@@ -53,6 +54,53 @@ export function GraphicsPicker() {
               )}
             </span>
             <span className="gfx-hint">{p.hint}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface EngineOpt {
+  id: EnginePower;
+  label: string;
+  hi: string;
+  hint: string;
+}
+
+const ENGINE_OPTS: EngineOpt[] = [
+  { id: 'standard', label: 'Standard', hi: 'मानक', hint: 'Single-core · lightest & smoothest' },
+  { id: 'max', label: 'Max', hi: 'प्रचंड', hint: 'Multi-core · deeper, fiercer search' },
+];
+
+/** Opt-in engine strength. 'Max' needs cross-origin isolation (SharedArrayBuffer);
+ *  where that isn't available the option is disabled and Standard is used. */
+export function EnginePowerPicker() {
+  const enginePower = useGame((s) => s.enginePower);
+  const setEnginePower = useGame((s) => s.setEnginePower);
+  const canMax = maxEngineAvailable();
+
+  return (
+    <div className="gfx-grid" role="radiogroup" aria-label="Engine strength">
+      {ENGINE_OPTS.map((o) => {
+        const active = enginePower === o.id;
+        const disabled = o.id === 'max' && !canMax;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            className={`gfx-chip ${active ? 'active' : ''}`}
+            onClick={() => setEnginePower(o.id)}
+            title={disabled ? 'Not available in this browser' : o.hint}
+          >
+            <span className="gfx-chip-head">
+              <span className="gfx-name">{o.label}</span>
+              <span className="gfx-hi">{o.hi}</span>
+            </span>
+            <span className="gfx-hint">{disabled ? 'Unavailable in this browser' : o.hint}</span>
           </button>
         );
       })}

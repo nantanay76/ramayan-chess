@@ -7,7 +7,8 @@ export type GameOverReason =
   | 'insufficient'
   | 'threefold'
   | 'fifty-move'
-  | 'resign';
+  | 'resign'
+  | 'timeout';
 
 export interface GameOver {
   reason: GameOverReason;

@@ -4,6 +4,9 @@ import { useGame } from '../store';
 import { ARMY, CHARACTERS, PIECE_GLYPH } from '../game/characters';
 import { InspectModal } from './InspectModal';
 import { SettingsMenu } from './Settings';
+import { EvalBar } from './EvalBar';
+import { MoveToast } from './MoveToast';
+import { Clocks } from './Clocks';
 
 export function HUD() {
   const turn = useGame((s) => s.turn);
@@ -93,6 +96,10 @@ export function HUD() {
       </div>
 
       {engineError && <div className="engine-error">{engineError}</div>}
+
+      <EvalBar />
+      <MoveToast />
+      <Clocks />
 
       <div className={`side-panel ${panelOpen ? 'open' : ''}`}>
         <div className="panel-section">
