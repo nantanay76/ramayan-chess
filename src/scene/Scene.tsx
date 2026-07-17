@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type ReactElement } fro
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerformanceMonitor } from '@react-three/drei';
-import { EffectComposer, Bloom, GodRays, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, GodRays, BrightnessContrast, HueSaturation } from '@react-three/postprocessing';
 import { useGame, type GraphicsPref } from '../store';
 import { Board, EdgeLabels } from './Board';
 import { Pieces } from './Pieces';
@@ -174,7 +174,11 @@ function Effects({ sunMesh, resolutionScale, godRaySamples, msaa }: {
           blur
         />
       ),
-      <Vignette key="vignette" eskil={false} offset={0.18} darkness={0.65} />,
+      // subtle filmic grade — richer golds, deeper maroons, no crushed blacks.
+      // (the vignette moved to CSS on .scene-wrap so every tier — including
+      // the composer-less potato tier — wears the identical frame)
+      <BrightnessContrast key="grade-bc" brightness={0} contrast={0.08} />,
+      <HueSaturation key="grade-hs" saturation={0.08} />,
     ].filter(Boolean) as ReactElement[];
     return list;
   }, [sunMesh, godRaySamples]);

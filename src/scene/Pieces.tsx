@@ -62,9 +62,12 @@ function PieceMesh({ piece }: { piece: TrackedPiece }) {
 
   // statues face the viewer like temple idols (knights keep the classic
   // profile); the rig carries them through a flip, so counter-rotate in
-  // group space to stay camera-facing — the lerp below makes them pirouette
+  // group space to stay camera-facing — the lerp below makes them pirouette.
+  // The Lanka statues are modeled facing -z (toward White), so they carry a
+  // permanent half-turn to obey the same face-the-viewer rule — without it
+  // the near army greets you with its back after a flip.
   const ry =
-    (piece.type === 'n' ? (piece.color === 'w' ? Math.PI / 2 : -Math.PI / 2) : 0) -
+    (piece.type === 'n' ? (piece.color === 'w' ? Math.PI / 2 : -Math.PI / 2) : piece.color === 'b' ? Math.PI : 0) -
     (flipped ? Math.PI : 0);
 
   const ref = useRef<THREE.Group>(null);

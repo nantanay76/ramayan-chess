@@ -461,6 +461,17 @@ button {
   inset: 0;
 }
 
+/* film vignette in CSS instead of a postprocessing pass — every quality tier
+   (even the composer-less potato tier) gets the identical frame, so adaptive
+   tier switches never pop the picture brighter/darker */
+.scene-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 74% 68% at 50% 44%, transparent 40%, rgba(10, 4, 9, 0.62) 100%);
+}
+
 @media (min-width: 921px) {
   .scene-wrap {
     right: 280px;

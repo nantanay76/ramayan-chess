@@ -102,9 +102,11 @@ const oceanShader = new THREE.ShaderMaterial({
     {
       uTime: { value: 0 },
       uSunPos: { value: new THREE.Vector3(...SUN_POS) },
+      uMoonPos: { value: new THREE.Vector3(26, 14, 38) },
       uDeep: { value: new THREE.Color('#1d3560') },
       uLift: { value: new THREE.Color('#4a6fa5') },
       uSunColor: { value: new THREE.Color('#ff9a4d') },
+      uMoonColor: { value: new THREE.Color('#bcd0ff') },
     },
   ]),
   vertexShader: /* glsl */ `
@@ -145,6 +147,8 @@ const oceanShader = new THREE.ShaderMaterial({
     uniform vec3 uLift;
     uniform vec3 uSunColor;
     uniform vec3 uSunPos;
+    uniform vec3 uMoonPos;
+    uniform vec3 uMoonColor;
     uniform float uTime;
     varying vec3 vWorld;
     varying vec3 vNormalW;
@@ -171,6 +175,16 @@ const oceanShader = new THREE.ShaderMaterial({
       float cell = hash(floor(vWorld.xz * 6.0) + floor(uTime * 2.0));
       float sparkle = spec * step(0.9, cell) * 1.8;
       col += uSunColor * (sheen + sparkle);
+      // cool moonlit counterpart, fainter and out of sync with the sun path,
+      // so the flipped (mainland-facing) view gets its own living water
+      vec3 Lm = normalize(uMoonPos - vWorld);
+      vec3 Hm = normalize(Lm + V);
+      float ndhm = max(dot(N, Hm), 0.0);
+      float msheen = pow(ndhm, 28.0) * 0.035;
+      float mspec = pow(ndhm, 240.0);
+      float mcell = hash(floor(vWorld.xz * 6.0) + floor(uTime * 2.0) + vec2(7.3, 3.1));
+      float msparkle = mspec * step(0.88, mcell) * 1.2;
+      col += uMoonColor * (msheen + msparkle);
       gl_FragColor = vec4(col, 1.0);
       #include <fog_fragment>
     }
@@ -193,14 +207,17 @@ const SUN_GLOW_LAYERS_LITE = [
   { size: 46, opacity: 0.5 },
 ];
 
-function Ocean({ onSunMesh, segments, sunLayers }: {
+function Ocean({ onSunMesh, segments, sunLayers, moonGlow }: {
   onSunMesh?: (m: THREE.Mesh | null) => void;
   segments: number;
   sunLayers: number;
+  moonGlow: boolean;
 }) {
   const sunRef = useRef<THREE.Group>(null);
+  const moonRef = useRef<THREE.Group>(null);
   const discRef = useRef<THREE.Mesh>(null);
   const sunWorld = useMemo(() => new THREE.Vector3(), []);
+  const moonWorld = useMemo(() => new THREE.Vector3(), []);
   const sunTex = useMemo(sunTexture, []);
   const glowLayers = sunLayers >= SUN_GLOW_LAYERS.length ? SUN_GLOW_LAYERS : SUN_GLOW_LAYERS_LITE;
 
@@ -209,6 +226,10 @@ function Ocean({ onSunMesh, segments, sunLayers }: {
     if (sunRef.current) {
       sunRef.current.getWorldPosition(sunWorld);
       (oceanShader.uniforms.uSunPos.value as THREE.Vector3).copy(sunWorld);
+    }
+    if (moonRef.current) {
+      moonRef.current.getWorldPosition(moonWorld);
+      (oceanShader.uniforms.uMoonPos.value as THREE.Vector3).copy(moonWorld);
     }
     // keep the god-rays anchor disc facing the camera (the rig can rotate it on flip)
     discRef.current?.lookAt(camera.position);
@@ -245,22 +266,20 @@ function Ocean({ onSunMesh, segments, sunLayers }: {
           raycast={noRaycast}
         />
       </group>
+      {/* rising moon over the mainland — the counterweight to the dusk sun,
+          and the light source the shader's second glitter path tracks. Kept
+          just above the waterline: the cinematic camera pitches 26° down, so
+          anything much above eye level (~y 4.5 at this distance) never enters
+          the frame — a low sea-moon is the only moon the player can see */}
+      <group ref={moonRef} position={[26, 3.8, 42]}>
+        {moonGlow && <sprite material={moonGlowMat} scale={[12, 12, 1]} raycast={noRaycast} />}
+        <sprite material={moonMat} scale={[3.2, 3.2, 1]} raycast={noRaycast} />
+      </group>
     </group>
   );
 }
 
-// ---------------------------------------------------------------- moon & clouds
-
-/** Rising moon over the mainland side — the counterweight to the dusk sun
- *  behind Lanka, so the flipped view isn't an empty sky. */
-function Moon({ glow }: { glow: boolean }) {
-  return (
-    <group position={[26, 14, 38]}>
-      {glow && <sprite material={moonGlowMat} scale={[13, 13, 1]} raycast={noRaycast} />}
-      <sprite material={moonMat} scale={[3.4, 3.4, 1]} raycast={noRaycast} />
-    </group>
-  );
-}
+// ---------------------------------------------------------------- clouds
 
 const CLOUDS: Array<{ a: number; r: number; y: number; w: number; h: number; m: number }> = (() => {
   const rand = seededRand(59);
@@ -590,9 +609,8 @@ export function Environment({ onSunMesh, oceanSegments = 110, sunLayers = 4, sta
         <sphereGeometry args={[70, 32, 20]} />
       </mesh>
       <Stars radius={55} depth={25} count={starCount} factor={3} saturation={0} fade speed={0.4} />
-      <Moon glow={diyaGlow} />
       {diyaGlow && <DriftingClouds />}
-      <Ocean onSunMesh={onSunMesh} segments={oceanSegments} sunLayers={sunLayers} />
+      <Ocean onSunMesh={onSunMesh} segments={oceanSegments} sunLayers={sunLayers} moonGlow={diyaGlow} />
       <LankaIsland />
       <MainlandShore />
       <RamSetu />
