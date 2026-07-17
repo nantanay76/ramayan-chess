@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGame } from '../store';
 import { ReviewModal } from './ReviewModal';
+import { Icon } from './Icon';
 
 export function GameOverModal() {
   const gameOver = useGame((s) => s.gameOver);
@@ -43,13 +44,15 @@ export function GameOverModal() {
     titleHi = '॥ संधि ॥';
     titleEn = 'The battle ends in truce';
     sub =
-      gameOver.reason === 'stalemate'
-        ? 'Stalemate — no lawful move remains.'
-        : gameOver.reason === 'insufficient'
-          ? 'Neither army has the strength left to win.'
-          : gameOver.reason === 'threefold'
-            ? 'The same position arose thrice — the war circles endlessly.'
-            : 'Fifty moves without progress — the armies rest.';
+      gameOver.reason === 'draw-agreed'
+        ? 'Both armies agree — an honourable truce.'
+        : gameOver.reason === 'stalemate'
+          ? 'Stalemate — no lawful move remains.'
+          : gameOver.reason === 'insufficient'
+            ? 'Neither army has the strength left to win.'
+            : gameOver.reason === 'threefold'
+              ? 'The same position arose thrice — the war circles endlessly.'
+              : 'Fifty moves without progress — the armies rest.';
   }
 
   return (
@@ -62,7 +65,9 @@ export function GameOverModal() {
         {lastResult && (
           <div className="result-strip">
             {lastResult.newlyConquered && (
-              <div className="conquest-banner">👑 New rank conquered!</div>
+              <div className="conquest-banner">
+                <Icon name="crown" size={15} /> New rank conquered!
+              </div>
             )}
             <div className="rating-line">
               <span
@@ -82,7 +87,7 @@ export function GameOverModal() {
           </button>
           {historyLen > 0 && (
             <button className="btn" onClick={() => setReviewing(true)}>
-              📜 War Review
+              <Icon name="scroll" size={15} /> War Review
             </button>
           )}
           <button className="btn" onClick={backToMenu}>

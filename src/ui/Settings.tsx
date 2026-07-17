@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGame, type GraphicsPref, type EnginePower } from '../store';
 import { maxEngineAvailable } from '../engine/ai';
+import { Icon } from './Icon';
 
 interface Preset {
   id: GraphicsPref;
@@ -108,6 +109,78 @@ export function EnginePowerPicker() {
   );
 }
 
+function ToggleChip({ label, hi, hint, on, onClick }: { label: string; hi: string; hint: string; on: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={`gfx-chip ${on ? 'active' : ''}`} aria-pressed={on} onClick={onClick}>
+      <span className="gfx-chip-head">
+        <span className="gfx-name">{label}</span>
+        <span className="gfx-hi">{hi}</span>
+      </span>
+      <span className="gfx-hint">{hint}</span>
+      <span className="gfx-auto" aria-hidden="true">{on ? '✓' : ''}</span>
+    </button>
+  );
+}
+
+/** Board-display preferences (legal-move dots, coordinates). */
+export function BoardPrefs() {
+  const showMoveDots = useGame((s) => s.showMoveDots);
+  const showCoords = useGame((s) => s.showCoords);
+  const toggleMoveDots = useGame((s) => s.toggleMoveDots);
+  const toggleCoords = useGame((s) => s.toggleCoords);
+
+  return (
+    <>
+      <ToggleChip
+        label="Move hints"
+        hi="संकेत"
+        hint="Dots on legal target squares"
+        on={showMoveDots}
+        onClick={toggleMoveDots}
+      />
+      <ToggleChip
+        label="Coordinates"
+        hi="निर्देशांक"
+        hint="File & rank labels on the board"
+        on={showCoords}
+        onClick={toggleCoords}
+      />
+    </>
+  );
+}
+
+/** Fullscreen toggle chip — hidden where the Fullscreen API isn't available
+ *  (e.g. iPhone Safari). */
+export function FullscreenChip() {
+  const [fs, setFs] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
+
+  useEffect(() => {
+    const on = () => setFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+
+  if (!document.documentElement.requestFullscreen) return null;
+
+  return (
+    <button
+      type="button"
+      className="gfx-chip"
+      onClick={() => {
+        if (document.fullscreenElement) void document.exitFullscreen();
+        else void document.documentElement.requestFullscreen();
+      }}
+    >
+      <span className="gfx-chip-head">
+        <span className="gfx-name">{fs ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+        <span className="gfx-hi">पूर्ण दृश्य</span>
+      </span>
+      <span className="gfx-hint">{fs ? 'Return to the window' : 'Immerse — hide the browser'}</span>
+      <Icon name={fs ? 'fullscreenExit' : 'fullscreen'} size={16} />
+    </button>
+  );
+}
+
 /** Gear button + heritage popover for the in-game HUD. Closes on Escape or an
  *  outside click; the trigger sits inside the same wrapper so clicking it just
  *  toggles instead of double-firing an outside-close. */
@@ -137,20 +210,23 @@ export function SettingsMenu() {
         type="button"
         className={`btn small icon gear ${open ? 'active' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        title="Graphics quality"
+        title="Settings"
+        aria-label="Settings"
         aria-haspopup="dialog"
         aria-expanded={open}
       >
         ⚙
       </button>
       {open && (
-        <div className="settings-pop" role="dialog" aria-label="Graphics settings">
+        <div className="settings-pop" role="dialog" aria-label="Settings">
           <div className="settings-title">
             <span className="settings-orn">॥</span>
-            <span>Graphics</span>
-            <span className="settings-title-hi">दृश्य</span>
+            <span>Settings</span>
+            <span className="settings-title-hi">समायोजन</span>
           </div>
           <GraphicsPicker />
+          <BoardPrefs />
+          <FullscreenChip />
           <p className="settings-foot">Auto adapts to your device. Ultra looks grandest on a strong GPU.</p>
         </div>
       )}

@@ -3,7 +3,7 @@ import type { Color, Move, PieceSymbol, Square } from 'chess.js';
 import { ChessGame, type GameOver } from './game/chess';
 import { derivePieces, type TrackedPiece } from './game/pieceTracker';
 import { LEVELS, armyStyle } from './engine/difficulty';
-import { getAiMove, startNewEngineGame, stopEngine, evaluatePosition, configureEnginePower, type EnginePower } from './engine/ai';
+import { getAiMove, startNewEngineGame, stopEngine, evaluatePosition, bestMoveFor, configureEnginePower, type EnginePower } from './engine/ai';
 import { classifyMove, type Ev, type MoveQuality } from './game/moveQuality';
 import { UNLIMITED, type TimeControl } from './game/timeControls';
 import { loadProfile, saveProfile, applyResult, type Profile } from './game/profile';
@@ -62,6 +62,31 @@ function loadEnginePower(): EnginePower {
     // localStorage may be unavailable — fall through to the safe default
   }
   return 'standard';
+}
+
+const UI_KEY = 'rc:ui';
+interface UiPrefs {
+  showMoveDots: boolean;
+  showCoords: boolean;
+}
+function loadUiPrefs(): UiPrefs {
+  try {
+    const raw = localStorage.getItem(UI_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<UiPrefs>;
+      return { showMoveDots: p.showMoveDots !== false, showCoords: p.showCoords !== false };
+    }
+  } catch {
+    // unavailable or corrupt JSON — fall through to defaults
+  }
+  return { showMoveDots: true, showCoords: true };
+}
+function saveUiPrefs(p: UiPrefs): void {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify(p));
+  } catch {
+    // best-effort persistence
+  }
 }
 
 interface BoardSnapshot {
@@ -168,6 +193,16 @@ export interface GameStore extends BoardSnapshot {
    *  the loading veil waits on this so the cold-start hitch stays hidden. */
   sceneReady: boolean;
   engineError: string | null;
+  /** Transient system message toast (e.g. a declined draw offer). */
+  notice: { seq: number; en: string; hi: string } | null;
+  /** Divine-counsel hint: the best-move squares to shimmer on the board. */
+  hint: { from: Square; to: Square } | null;
+  hintsLeft: number;
+  hintPending: boolean;
+  /** One draw offer per game (vs computer). */
+  drawOffered: boolean;
+  showMoveDots: boolean;
+  showCoords: boolean;
 
   startGame(mode: Mode, levelIdx: number, playerColor: Color, timeControl?: TimeControl): void;
   backToMenu(): void;
@@ -178,6 +213,10 @@ export interface GameStore extends BoardSnapshot {
   cancelPromotion(): void;
   undoMove(): void;
   resign(): void;
+  requestHint(): void;
+  offerDraw(): void;
+  toggleMoveDots(): void;
+  toggleCoords(): void;
   flipBoard(): void;
   toggleTopDownView(): void;
   toggleSound(): void;
@@ -216,6 +255,9 @@ export const useGame = create<GameStore>((set, get) => {
   }
 
   function applyMove(from: Square, to: Square, promotion?: PieceSymbol): boolean {
+    // A finished game accepts no further moves — e.g. a promotion confirmed
+    // after the flag already fell must not resurrect the game.
+    if (get().gameOver) return false;
     // Snapshot the eval of the position being moved from, so a human move can be
     // graded against the best play that eval already assumes.
     const before: Ev = { cp: get().evalCp, mate: get().evalMate };
@@ -237,7 +279,7 @@ export const useGame = create<GameStore>((set, get) => {
       playSound('move');
     }
 
-    set({ ...snap, selected: null, targets: [], promotionPending: null, gameOver: over, thinking: false });
+    set({ ...snap, selected: null, targets: [], promotionPending: null, gameOver: over, thinking: false, hint: null });
     advanceClock(move.color, !!over);
     if (over) {
       // Freeze the meter on the result; drop any eval still in flight.
@@ -324,6 +366,9 @@ export const useGame = create<GameStore>((set, get) => {
         const wait = Math.max(0, 650 - (Date.now() - started));
         if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         if (token !== aiToken || get().screen !== 'game') return;
+        // The theatrical pause is ours, not the AI's — hand its clock the time back.
+        const since = get().clockSince;
+        if (wait > 0 && since != null) set({ clockSince: since + wait });
         const from = uci.slice(0, 2) as Square;
         const to = uci.slice(2, 4) as Square;
         const promotion = uci.length > 4 ? (uci[4] as PieceSymbol) : undefined;
@@ -332,7 +377,8 @@ export const useGame = create<GameStore>((set, get) => {
       .catch((err) => {
         console.error('Engine failure:', err);
         if (token === aiToken) {
-          set({ thinking: false, engineError: 'The engine could not move. Try a new game.' });
+          // Freeze the clock too — a dead engine must not win or lose on time.
+          set({ thinking: false, engineError: 'The engine could not move. Try a new game.', clockSince: null });
         }
       });
   }
@@ -367,6 +413,12 @@ export const useGame = create<GameStore>((set, get) => {
     graphicsPref: loadGraphicsPref(),
     sceneReady: false,
     engineError: null,
+    notice: null,
+    hint: null,
+    hintsLeft: 3,
+    hintPending: false,
+    drawOffered: false,
+    ...loadUiPrefs(),
 
     startGame(mode, levelIdx, playerColor, timeControl) {
       aiToken++;
@@ -392,6 +444,11 @@ export const useGame = create<GameStore>((set, get) => {
         annotations: [],
         lastNote: null,
         lastResult: null,
+        notice: null,
+        hint: null,
+        hintsLeft: 3,
+        hintPending: false,
+        drawOffered: false,
         timeControl: tc,
         whiteMs: timed ? tc.initialMs : null,
         blackMs: timed ? tc.initialMs : null,
@@ -403,14 +460,19 @@ export const useGame = create<GameStore>((set, get) => {
       if (mode === 'ai') {
         configureEnginePower(get().enginePower);
         set({ thinking: true });
+        const token = aiToken;
         startNewEngineGame(LEVELS[levelIdx])
           .then(() => {
-            set({ thinking: false });
+            if (token !== aiToken || get().screen !== 'game') return;
+            // Engine cold-start time shouldn't come off anyone's clock.
+            set({ thinking: false, clockSince: get().clockSince != null ? Date.now() : null });
             maybeAiMove();
           })
           .catch((err) => {
             console.error('Engine failed to start:', err);
-            set({ thinking: false, engineError: 'Could not load the chess engine.' });
+            if (token !== aiToken || get().screen !== 'game') return;
+            // Freeze the clock — an engine that never loaded must not flag.
+            set({ thinking: false, engineError: 'Could not load the chess engine.', clockSince: null });
           });
       }
     },
@@ -439,6 +501,7 @@ export const useGame = create<GameStore>((set, get) => {
         thinking: false,
         selected: null,
         targets: [],
+        promotionPending: null,
         evalMate: winner === 'w' ? 1 : -1,
         evalCp: null,
         ...flagged,
@@ -498,10 +561,23 @@ export const useGame = create<GameStore>((set, get) => {
         set({ thinking: false });
         return;
       }
+      const undone: Color[] = [s.history[s.history.length - 1].color];
       game.undo();
       // vs computer: rewind the AI reply too, back to the player's turn
       if (s.mode === 'ai' && game.turn() !== s.playerColor && game.history().length > 0) {
+        undone.push(s.history[s.history.length - 2].color);
         game.undo();
+      }
+      // Claw back the increment banked on each undone move — otherwise
+      // move+undo cycles farm free time in increment games. Floored so a
+      // low clock is never pushed into an instant flag.
+      let whiteMs = s.whiteMs;
+      let blackMs = s.blackMs;
+      if (whiteMs != null && blackMs != null && s.incrementMs > 0) {
+        for (const c of undone) {
+          if (c === 'w') whiteMs = Math.max(Math.min(whiteMs, 1000), whiteMs - s.incrementMs);
+          else blackMs = Math.max(Math.min(blackMs, 1000), blackMs - s.incrementMs);
+        }
       }
       set({
         ...snapshot(),
@@ -512,8 +588,12 @@ export const useGame = create<GameStore>((set, get) => {
         thinking: false,
         annotations: get().annotations.slice(0, game.history().length),
         lastNote: null,
-        // hand the running clock to the side now on the move (no time restored)
-        clockSince: get().whiteMs != null ? Date.now() : null,
+        notice: null,
+        hint: null,
+        whiteMs,
+        blackMs,
+        // hand the running clock to the side now on the move (no elapsed time restored)
+        clockSince: whiteMs != null ? Date.now() : null,
       });
       scheduleEval();
       // e.g. player plays black and undid past move 1: white (AI) must move again
@@ -534,11 +614,82 @@ export const useGame = create<GameStore>((set, get) => {
         thinking: false,
         selected: null,
         targets: [],
+        promotionPending: null,
         evalMate: winner === 'w' ? 1 : -1,
         evalCp: null,
         clockSince: null,
       });
       finalizeResult(over);
+    },
+
+    requestHint() {
+      const s = get();
+      if (s.screen !== 'game' || s.gameOver || s.promotionPending || s.hintPending || s.hintsLeft <= 0) return;
+      if (s.mode === 'ai' && s.turn !== s.playerColor) return;
+      const gen = gameGen;
+      set({ hintPending: true });
+      void bestMoveFor(game.fen())
+        .then((uci) => {
+          if (gen !== gameGen || get().screen !== 'game' || !uci) return;
+          playSound('select');
+          set({
+            hint: { from: uci.slice(0, 2) as Square, to: uci.slice(2, 4) as Square },
+            hintsLeft: get().hintsLeft - 1,
+          });
+        })
+        .catch(() => {
+          // counsel is best-effort — a failed engine just stays silent
+        })
+        .finally(() => {
+          if (gen === gameGen) set({ hintPending: false });
+        });
+    },
+
+    offerDraw() {
+      const s = get();
+      if (s.screen !== 'game' || s.gameOver || s.mode !== 'ai' || s.drawOffered) return;
+      set({ drawOffered: true });
+      // The AI accepts only a genuinely level position past the opening —
+      // an edge, a mate score, or a premature offer is turned down.
+      const level = s.evalMate === null && s.evalCp != null && Math.abs(s.evalCp) <= 60;
+      if (level && s.history.length >= 20) {
+        aiToken++;
+        evalToken++;
+        stopEngine();
+        playSound('draw');
+        const over: GameOver = { reason: 'draw-agreed', winner: null };
+        set({
+          gameOver: over,
+          thinking: false,
+          selected: null,
+          targets: [],
+          promotionPending: null,
+          hint: null,
+          evalCp: 0,
+          evalMate: null,
+          clockSince: null,
+        });
+        finalizeResult(over);
+      } else {
+        const lankaAi = s.playerColor === 'w';
+        set({
+          notice: lankaAi
+            ? { seq: ++noteSeq, en: 'Ravana scorns your truce', hi: 'रावण ने संधि ठुकराई' }
+            : { seq: ++noteSeq, en: "Shri Ram's army fights on", hi: 'युद्ध जारी रहेगा' },
+        });
+      }
+    },
+
+    toggleMoveDots() {
+      const next = { showMoveDots: !get().showMoveDots, showCoords: get().showCoords };
+      saveUiPrefs(next);
+      set(next);
+    },
+
+    toggleCoords() {
+      const next = { showMoveDots: get().showMoveDots, showCoords: !get().showCoords };
+      saveUiPrefs(next);
+      set(next);
     },
 
     flipBoard() {

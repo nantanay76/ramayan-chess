@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import type { Square } from 'chess.js';
@@ -17,6 +17,7 @@ import {
   captureRingMat,
   lastMoveMat,
   checkMat,
+  hintMat,
 } from './materials';
 
 const squareGeo = new THREE.BoxGeometry(0.995, 0.12, 0.995);
@@ -64,33 +65,46 @@ function FlatLabel({ text, x, z, size = 0.42 }: { text: string; x: number; z: nu
   );
 }
 
-function Squares() {
-  const clickSquare = useGame((s) => s.clickSquare);
-  return (
-    <group>
-      {SQUARES.map((sq) => {
-        // square world position is flip-invariant in color pattern, but the
-        // click target must map through the current orientation — so we place
-        // geometry statically and resolve the square in the handler instead.
-        return <BoardSquare key={sq} square={sq} onPick={clickSquare} />;
-      })}
-    </group>
-  );
-}
+const LIGHT_SQUARES = SQUARES.filter((sq) => !isDarkSquare(sq));
+const DARK_SQUARES = SQUARES.filter(isDarkSquare);
 
-function BoardSquare({ square, onPick }: { square: Square; onPick: (sq: Square) => void }) {
-  const [x, z] = squareToWorld(square);
+/** All 32 squares of one colour in a single InstancedMesh — 2 draw calls for
+ *  the whole board (and 2 in the shadow pass) instead of 64+64. Squares are
+ *  placed statically; flips rotate the whole rig, and clicks resolve through
+ *  the raycast hit's instanceId. */
+function SquareInstances({ squares, material }: { squares: Square[]; material: THREE.Material }) {
+  const clickSquare = useGame((s) => s.clickSquare);
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    squares.forEach((sq, i) => {
+      const [x, z] = squareToWorld(sq);
+      m.makeTranslation(x, -0.06, z);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [squares]);
   return (
-    <mesh
-      geometry={squareGeo}
-      material={isDarkSquare(square) ? boardDark : boardLight}
-      position={[x, -0.06, z]}
+    <instancedMesh
+      ref={ref}
+      args={[squareGeo, material, squares.length]}
       receiveShadow
       onClick={(e) => {
         e.stopPropagation();
-        onPick(square);
+        if (e.instanceId != null) clickSquare(squares[e.instanceId]);
       }}
     />
+  );
+}
+
+function Squares() {
+  return (
+    <group>
+      <SquareInstances squares={LIGHT_SQUARES} material={boardLight} />
+      <SquareInstances squares={DARK_SQUARES} material={boardDark} />
+    </group>
   );
 }
 
@@ -105,12 +119,38 @@ function CheckOverlay({ x, z }: { x: number; z: number }) {
   );
 }
 
+/** Divine-counsel shimmer on the suggested from/to squares. */
+function HintOverlay() {
+  const hint = useGame((s) => s.hint);
+  useFrame(({ clock }) => {
+    hintMat.opacity = 0.3 + Math.sin(clock.elapsedTime * 4) * 0.16;
+  });
+  if (!hint) return null;
+  return (
+    <>
+      {[hint.from, hint.to].map((sq) => {
+        const [x, z] = squareToWorld(sq);
+        return (
+          <mesh
+            key={`h-${sq}`}
+            geometry={overlayGeo}
+            material={hintMat}
+            position={[x, 0.0055, z]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 function Overlays() {
   const selected = useGame((s) => s.selected);
   const targets = useGame((s) => s.targets);
   const lastMove = useGame((s) => s.lastMove);
   const checkSquare = useGame((s) => s.checkSquare);
   const clickSquare = useGame((s) => s.clickSquare);
+  const showMoveDots = useGame((s) => s.showMoveDots);
 
   const targetSquares = useMemo(() => {
     const seen = new Map<Square, boolean>();
@@ -135,7 +175,8 @@ function Overlays() {
           const [x, z] = squareToWorld(selected);
           return <mesh geometry={overlayGeo} material={selectMat} position={[x, 0.006, z]} rotation={flat} />;
         })()}
-      {targetSquares.map(([sq, isCapture]) => {
+      <HintOverlay />
+      {showMoveDots && targetSquares.map(([sq, isCapture]) => {
         const [x, z] = squareToWorld(sq);
         return (
           <mesh
@@ -247,6 +288,8 @@ function Frame() {
  */
 export function EdgeLabels() {
   const flipped = useGame((s) => s.flipped);
+  const showCoords = useGame((s) => s.showCoords);
+  if (!showCoords) return null;
   const labels: Array<{ key: string; text: string; x: number; z: number }> = [];
   for (let f = 0; f < 8; f++) {
     const letter = String.fromCharCode(97 + f);

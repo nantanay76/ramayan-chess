@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Tiro+Devanagari+Hindi&display=swap');
+/* fonts load via <link> in index.html — a CSS @import here would serialize
+   behind the stylesheet fetch and delay first paint */
 
 :root {
   --deep: #170b16;
@@ -42,6 +43,8 @@ body {
 button {
   font-family: inherit;
   cursor: pointer;
+  /* kill the 300ms double-tap-zoom delay on touch devices */
+  touch-action: manipulation;
 }
 
 /* ---------------------------------------------------------------- menu */
@@ -122,7 +125,8 @@ button {
   transition: all 0.15s;
 }
 
-.tab:hover {
+.tab:hover,
+.tab:active {
   border-color: rgba(217, 164, 65, 0.7);
 }
 
@@ -176,7 +180,8 @@ button {
   transition: all 0.13s;
 }
 
-.chip:hover {
+.chip:hover,
+.chip:active {
   border-color: rgba(217, 164, 65, 0.7);
 }
 
@@ -284,6 +289,7 @@ button {
   top: -7px;
   right: -5px;
   font-size: 0.72rem;
+  color: var(--gold-bright);
   filter: drop-shadow(0 0 3px rgba(240, 196, 106, 0.7));
 }
 
@@ -352,7 +358,8 @@ button {
   transition: all 0.13s;
 }
 
-.side:hover {
+.side:hover,
+.side:active {
   border-color: rgba(217, 164, 65, 0.7);
 }
 
@@ -446,6 +453,7 @@ button {
 
 .game-root canvas {
   display: block;
+  touch-action: manipulation;
 }
 
 .scene-wrap {
@@ -468,7 +476,8 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px 14px;
+  padding: calc(12px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 12px
+    calc(14px + env(safe-area-inset-left));
   pointer-events: none;
 }
 
@@ -541,7 +550,8 @@ button {
   transition: all 0.13s;
 }
 
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled),
+.btn:active:not(:disabled) {
   border-color: var(--gold-bright);
   box-shadow: 0 0 14px rgba(217, 164, 65, 0.3);
 }
@@ -560,7 +570,8 @@ button {
   padding: 7px 10px;
 }
 
-.btn.danger:hover:not(:disabled) {
+.btn.danger:hover:not(:disabled),
+.btn.danger:active:not(:disabled) {
   border-color: var(--danger);
   box-shadow: 0 0 14px rgba(255, 107, 90, 0.35);
 }
@@ -581,7 +592,7 @@ button {
 /* --------------------------------------------------- eval bar (dharma meter) */
 .eval-bar {
   position: absolute;
-  left: 14px;
+  left: calc(14px + env(safe-area-inset-left));
   top: 50%;
   transform: translateY(-50%);
   width: 14px;
@@ -638,7 +649,7 @@ button {
 @media (max-width: 920px) {
   .eval-bar {
     height: 42vh;
-    left: 8px;
+    left: calc(8px + env(safe-area-inset-left));
     width: 11px;
   }
 }
@@ -709,7 +720,7 @@ button {
 /* --------------------------------------------------- clocks (war hourglasses) */
 .clocks {
   position: absolute;
-  right: 16px;
+  right: calc(16px + env(safe-area-inset-right));
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -780,7 +791,7 @@ button {
 
 @media (max-width: 920px) {
   .clocks {
-    right: 8px;
+    right: calc(8px + env(safe-area-inset-right));
     gap: 10px;
   }
   .clock {
@@ -848,7 +859,7 @@ button {
 }
 
 .none {
-  color: rgba(243, 226, 192, 0.35);
+  color: rgba(243, 226, 192, 0.55);
   font-size: 0.75rem;
   font-style: italic;
 }
@@ -880,7 +891,7 @@ button {
 
 .hud-bottom {
   position: absolute;
-  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -889,8 +900,8 @@ button {
 
 .piece-chip {
   position: absolute;
-  bottom: 14px;
-  left: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  left: calc(14px + env(safe-area-inset-left));
   padding: 8px 16px;
   border-radius: 12px;
   border: 1px solid rgba(217, 164, 65, 0.4);
@@ -1017,6 +1028,8 @@ button {
 .promo-btn:focus-visible,
 .start-btn:focus-visible,
 .inspect-close:focus-visible,
+.review-close:focus-visible,
+.rm-move:focus-visible,
 .inspect-btn:focus-visible {
   outline-width: 2px;
   outline-style: solid;
@@ -1039,6 +1052,14 @@ button {
   padding: 30px 26px 24px;
   background: linear-gradient(180deg, rgba(74, 20, 32, 0.92), rgba(23, 11, 22, 0.96));
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+/* modals share the settings popover's transform-only entrance — never
+   invisible at rest even if the animation is throttled or reduced */
+.modal,
+.inspect-modal {
+  transform-origin: 50% 35%;
+  animation: settings-in 0.22s ease both;
 }
 
 .modal-title-hi {
@@ -1340,7 +1361,8 @@ button {
   text-align: left;
 }
 
-.rm-move:hover { background: rgba(217, 164, 65, 0.12); }
+.rm-move:hover,
+.rm-move:active { background: rgba(217, 164, 65, 0.12); }
 .rm-move.active { background: rgba(217, 164, 65, 0.24); }
 
 .rm-dot { font-size: 0.6rem; }
@@ -1371,7 +1393,8 @@ button {
   transition: all 0.13s;
 }
 
-.promo-btn:hover {
+.promo-btn:hover,
+.promo-btn:active {
   border-color: var(--gold-bright);
   background: rgba(107, 29, 44, 0.6);
   box-shadow: 0 0 14px rgba(217, 164, 65, 0.25);
@@ -1482,9 +1505,19 @@ button {
     display: inline-block;
   }
 
+  /* the 5 icon buttons + Menu don't fit beside the banner on a phone —
+     wrap the banner onto its own full-width second row */
+  .hud-top {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
   .turn-banner {
     font-size: 0.72rem;
     padding: 8px 12px;
+    order: 3;
+    flex: 1 1 100%;
+    text-align: center;
   }
 
   .piece-chip {
@@ -1492,9 +1525,17 @@ button {
   }
 
   .hud-bottom {
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
     width: 100%;
     justify-content: center;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  /* five actions must fit a 390px row */
+  .hud-bottom .btn {
+    padding: 8px 12px;
+    font-size: 0.78rem;
   }
 
   .level-grid {
@@ -1523,7 +1564,8 @@ button {
     justify-content: center;
   }
 
-  .inspect-close {
+  .inspect-close,
+  .review-close {
     width: 44px;
     height: 44px;
   }
@@ -1534,6 +1576,62 @@ button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .rm-move {
+    min-height: 32px;
+  }
+}
+
+/* landscape phones / very short viewports: thin the chrome so the board wins */
+@media (max-height: 460px) {
+  .hud-top {
+    padding-top: calc(6px + env(safe-area-inset-top));
+    padding-bottom: 4px;
+  }
+
+  .hud-bottom {
+    bottom: calc(6px + env(safe-area-inset-bottom));
+  }
+
+  .move-toast {
+    top: 52px;
+  }
+
+  /* keep the (rare) engine banner clear of the move toast */
+  .engine-error {
+    top: auto;
+    bottom: 56px;
+  }
+
+  .eval-bar {
+    height: 56vh;
+  }
+
+  .piece-chip {
+    display: none;
+  }
+
+  .inspect-viewport {
+    height: min(300px, 48vh);
+  }
+
+  .review-body {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .review-board {
+    width: min(240px, 55vh);
+    height: min(240px, 55vh);
+  }
+
+  .review-side {
+    width: 100%;
+  }
+
+  .review-moves {
+    max-height: 90px;
   }
 }
 
@@ -1602,7 +1700,9 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-pop {
+  .settings-pop,
+  .modal,
+  .inspect-modal {
     animation: none;
   }
 }
@@ -1650,6 +1750,11 @@ button {
   gap: 6px;
 }
 
+/* standalone chips placed after a picker inside the popover keep the grid rhythm */
+.settings-pop > .gfx-chip {
+  margin-top: 6px;
+}
+
 .gfx-chip {
   display: flex;
   align-items: center;
@@ -1664,7 +1769,8 @@ button {
   transition: all 0.13s;
 }
 
-.gfx-chip:hover {
+.gfx-chip:hover,
+.gfx-chip:active {
   border-color: rgba(217, 164, 65, 0.7);
 }
 

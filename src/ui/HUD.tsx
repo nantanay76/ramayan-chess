@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { Color } from 'chess.js';
 import { useGame } from '../store';
 import { ARMY, CHARACTERS, PIECE_GLYPH } from '../game/characters';
-import { InspectModal } from './InspectModal';
 import { SettingsMenu } from './Settings';
+import { Icon } from './Icon';
+
+// Pulls in a second Canvas + drei; loads with (and shares) the 3D chunk.
+const InspectModal = lazy(() => import('./InspectModal').then((m) => ({ default: m.InspectModal })));
 import { EvalBar } from './EvalBar';
 import { MoveToast } from './MoveToast';
 import { Clocks } from './Clocks';
@@ -12,7 +15,11 @@ export function HUD() {
   const turn = useGame((s) => s.turn);
   const thinking = useGame((s) => s.thinking);
   const playerColor = useGame((s) => s.playerColor);
+  const mode = useGame((s) => s.mode);
   const gameOver = useGame((s) => s.gameOver);
+  const hintsLeft = useGame((s) => s.hintsLeft);
+  const hintPending = useGame((s) => s.hintPending);
+  const drawOffered = useGame((s) => s.drawOffered);
   const history = useGame((s) => s.history);
   const capturedByWhite = useGame((s) => s.capturedByWhite);
   const capturedByBlack = useGame((s) => s.capturedByBlack);
@@ -26,6 +33,8 @@ export function HUD() {
   const backToMenu = useGame((s) => s.backToMenu);
   const undoMove = useGame((s) => s.undoMove);
   const resign = useGame((s) => s.resign);
+  const requestHint = useGame((s) => s.requestHint);
+  const offerDraw = useGame((s) => s.offerDraw);
   const flipBoard = useGame((s) => s.flipBoard);
   const toggleSound = useGame((s) => s.toggleSound);
   const toggleMusic = useGame((s) => s.toggleMusic);
@@ -77,25 +86,48 @@ export function HUD() {
         <button className="btn small" onClick={backToMenu}>
           ← Menu
         </button>
-        <div className="turn-banner">{banner}</div>
+        <div className="turn-banner" role="status" aria-live="polite">{banner}</div>
         <div className="top-right">
-          <button className="btn small icon" onClick={toggleSound} title="Sound effects">
-            {soundOn ? '🔊' : '🔇'}
+          <button
+            className="btn small icon"
+            onClick={toggleSound}
+            title={soundOn ? 'Mute sound effects' : 'Unmute sound effects'}
+            aria-label={soundOn ? 'Mute sound effects' : 'Unmute sound effects'}
+            aria-pressed={soundOn}
+          >
+            <Icon name={soundOn ? 'sound' : 'soundOff'} />
           </button>
-          <button className="btn small icon" onClick={toggleMusic} title="Ambient music">
-            {musicOn ? '🎵' : '🎶'}
+          <button
+            className="btn small icon"
+            onClick={toggleMusic}
+            title={musicOn ? 'Stop ambient music' : 'Play ambient music'}
+            aria-label={musicOn ? 'Stop ambient music' : 'Play ambient music'}
+            aria-pressed={musicOn}
+          >
+            <Icon name={musicOn ? 'music' : 'musicOff'} />
           </button>
-          <button className="btn small icon" onClick={toggleTopDownView} title="Top-down view">
-            {topDownView ? '⬇' : '🎥'}
+          <button
+            className="btn small icon"
+            onClick={toggleTopDownView}
+            title={topDownView ? 'Cinematic view' : 'Top-down view'}
+            aria-label={topDownView ? 'Switch to cinematic view' : 'Switch to top-down view'}
+          >
+            <Icon name={topDownView ? 'camera' : 'boardTop'} />
           </button>
           <SettingsMenu />
-          <button className="btn small icon panel-toggle" onClick={() => setPanelOpen((v) => !v)} title="Battle scroll">
-            📜
+          <button
+            className="btn small icon panel-toggle"
+            onClick={() => setPanelOpen((v) => !v)}
+            title="Battle scroll"
+            aria-label="Battle scroll — moves and captures"
+            aria-expanded={panelOpen}
+          >
+            <Icon name="scroll" />
           </button>
         </div>
       </div>
 
-      {engineError && <div className="engine-error">{engineError}</div>}
+      {engineError && <div className="engine-error" role="alert">{engineError}</div>}
 
       <EvalBar />
       <MoveToast />
@@ -137,13 +169,35 @@ export function HUD() {
 
       <div className="hud-bottom">
         <button className="btn" onClick={undoMove} disabled={history.length === 0 && !thinking}>
-          ⎌ Undo
+          <Icon name="undo" size={15} /> Undo
         </button>
         <button className="btn" onClick={flipBoard}>
-          ⇅ Flip
+          <Icon name="flip" size={15} /> Flip
         </button>
+        {mode === 'ai' && (
+          <>
+            <button
+              className="btn"
+              onClick={requestHint}
+              disabled={hintsLeft <= 0 || hintPending || !!gameOver || thinking || turn !== playerColor}
+              title={`Divine counsel — ${hintsLeft} left`}
+              aria-label={`Divine counsel hint, ${hintsLeft} left`}
+            >
+              <Icon name="lamp" size={15} /> {hintsLeft}
+            </button>
+            <button
+              className="btn"
+              onClick={offerDraw}
+              disabled={drawOffered || !!gameOver}
+              title={drawOffered ? 'Draw already offered' : 'Offer a draw'}
+              aria-label={drawOffered ? 'Draw already offered' : 'Offer a draw'}
+            >
+              ½
+            </button>
+          </>
+        )}
         <button className="btn danger" onClick={resign} disabled={!!gameOver}>
-          🏳 Resign
+          <Icon name="flag" size={15} /> Resign
         </button>
       </div>
 
@@ -156,18 +210,25 @@ export function HUD() {
               {CHARACTERS[selectedPiece.color][selectedPiece.type].piece}
             </span>
           </div>
-          <button className="inspect-btn" onClick={() => setInspecting(true)} title="Inspect this piece">
-            🔍
+          <button
+            className="inspect-btn"
+            onClick={() => setInspecting(true)}
+            title="Inspect this piece"
+            aria-label="Inspect this piece"
+          >
+            <Icon name="magnifier" size={16} />
           </button>
         </div>
       )}
 
       {inspecting && selectedPiece && (
-        <InspectModal
-          type={selectedPiece.type}
-          color={selectedPiece.color}
-          onClose={() => setInspecting(false)}
-        />
+        <Suspense fallback={null}>
+          <InspectModal
+            type={selectedPiece.type}
+            color={selectedPiece.color}
+            onClose={() => setInspecting(false)}
+          />
+        </Suspense>
       )}
     </>
   );

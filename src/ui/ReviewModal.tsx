@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Color } from 'chess.js';
 import { useGame } from '../store';
 import { ARMY, PIECE_GLYPH } from '../game/characters';
 import { QUALITY_META } from '../game/moveQuality';
 import { buildReview, type ReviewMove } from '../game/review';
+import { Icon } from './Icon';
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
@@ -101,6 +102,20 @@ export function ReviewModal({ onClose }: { onClose: () => void }) {
 
   const step = (d: number) => setCurrent((c) => Math.max(0, Math.min(moves.length - 1, c + d)));
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowLeft') setCurrent((c) => Math.max(0, c - 1));
+      else if (e.key === 'ArrowRight') setCurrent((c) => Math.min(moves.length - 1, c + 1));
+      else if (e.key === 'Home') setCurrent(0);
+      else if (e.key === 'End') setCurrent(moves.length - 1);
+      else if (e.key === 'Escape') onClose();
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [moves.length, onClose]);
+
   const rows: Array<{ n: number; w?: ReviewMove; b?: ReviewMove }> = [];
   for (let i = 0; i < moves.length; i += 2) {
     rows.push({ n: i / 2 + 1, w: moves[i], b: moves[i + 1] });
@@ -109,7 +124,7 @@ export function ReviewModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="overlay">
       <div className="modal review">
-        <button className="review-close" onClick={onClose} title="Close">
+        <button className="review-close" onClick={onClose} title="Close" aria-label="Close">
           ✕
         </button>
         <h2 className="modal-title-hi">॥ युद्ध समीक्षा ॥</h2>
@@ -159,21 +174,27 @@ export function ReviewModal({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="review-nav">
-              <button className="btn small" onClick={() => setCurrent(0)} disabled={current <= 0}>
-                ⏮
+              <button className="btn small" onClick={() => setCurrent(0)} disabled={current <= 0} aria-label="First move">
+                <Icon name="chevronFirst" size={15} />
               </button>
-              <button className="btn small" onClick={() => step(-1)} disabled={current <= 0}>
-                ◀
+              <button className="btn small" onClick={() => step(-1)} disabled={current <= 0} aria-label="Previous move">
+                <Icon name="chevronLeft" size={15} />
               </button>
-              <button className="btn small" onClick={() => step(1)} disabled={current >= moves.length - 1}>
-                ▶
+              <button
+                className="btn small"
+                onClick={() => step(1)}
+                disabled={current >= moves.length - 1}
+                aria-label="Next move"
+              >
+                <Icon name="chevronRight" size={15} />
               </button>
               <button
                 className="btn small"
                 onClick={() => setCurrent(moves.length - 1)}
                 disabled={current >= moves.length - 1}
+                aria-label="Last move"
               >
-                ⏭
+                <Icon name="chevronLast" size={15} />
               </button>
             </div>
 

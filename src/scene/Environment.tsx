@@ -1,7 +1,8 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   flameMat,
   flameGlowMat,
@@ -247,104 +248,101 @@ function Ocean({ onSunMesh, segments, sunLayers }: {
 
 // ---------------------------------------------------------------- lanka island (behind the black side)
 
+/** Everything on the island is static, so each material's meshes are merged
+ *  into ONE geometry — the whole skyline (base + 7 cliffs + 9 multi-tier
+ *  gopuram towers + trims/roofs) renders in ~6 draw calls instead of ~80.
+ *  The rand() call order below must stay exactly as the original per-mesh
+ *  version so the silhouette is pixel-identical. */
 function LankaIsland() {
-  const cliffs = useMemo(() => {
-    const rand = seededRand(11);
-    const out: Array<{ p: [number, number, number]; r: number; h: number; ry: number }> = [];
-    for (let i = 0; i < 7; i++) {
-      const h = 7 + rand() * 7;
-      out.push({
-        p: [-30 + i * 7.6 + (rand() - 0.5) * 4, h / 2 - 2.2, -56 + (rand() - 0.5) * 7],
-        r: 5 + rand() * 4,
-        h,
-        ry: rand() * Math.PI,
-      });
+  const merged = useMemo(() => {
+    // cliffs + island base → one geometry on cliffMat
+    const cliffGeos: THREE.BufferGeometry[] = [];
+    const base = new THREE.ConeGeometry(30, 5, 24);
+    base.translate(-4, -2.2, -54);
+    cliffGeos.push(base);
+    {
+      const rand = seededRand(11);
+      for (let i = 0; i < 7; i++) {
+        const h = 7 + rand() * 7;
+        const px = -30 + i * 7.6 + (rand() - 0.5) * 4;
+        const pz = -56 + (rand() - 0.5) * 7;
+        const r = 5 + rand() * 4;
+        const ry = rand() * Math.PI;
+        const g = new THREE.ConeGeometry(r, h, 7);
+        g.rotateY(ry);
+        g.translate(px, h / 2 - 2.2, pz);
+        cliffGeos.push(g);
+      }
     }
-    return out;
+
+    // gopuram towers: tiers grouped per window-texture material, trims/roofs on gold
+    const byTowerMat: THREE.BufferGeometry[][] = towerMats.map(() => []);
+    const goldGeos: THREE.BufferGeometry[] = [];
+    {
+      const rand = seededRand(31);
+      const PALACE_IDX = 4;
+      for (let i = 0; i < 9; i++) {
+        const isPalace = i === PALACE_IDX;
+        const tierCount = isPalace ? 5 : 2 + Math.floor(rand() * 3);
+        let w = isPalace ? 2.1 : 1.05 + rand() * 1.0;
+        const tierH: number[] = [];
+        const tierW: number[] = [];
+        for (let t = 0; t < tierCount; t++) {
+          tierH.push((isPalace ? 1.5 : 1.0 + rand() * 0.55) * (1 - t * 0.06));
+          tierW.push(w);
+          w *= isPalace ? 0.78 : 0.7 - rand() * 0.08;
+        }
+        const x = -13 + i * 3.2 + (rand() - 0.5) * 1.3;
+        const z = -49 - rand() * 4.5 - (isPalace ? 2.5 : 0);
+        const matIdx = i % towerMats.length;
+
+        let y = 0.6;
+        tierH.forEach((h, ti) => {
+          y += h / 2;
+          const tier = new THREE.BoxGeometry(tierW[ti], h, tierW[ti]);
+          tier.translate(x, y, z);
+          byTowerMat[matIdx].push(tier);
+          const trim = new THREE.BoxGeometry(tierW[ti] * 1.08, 0.07, tierW[ti] * 1.08);
+          trim.translate(x, y + h / 2, z);
+          goldGeos.push(trim);
+          y += h / 2;
+        });
+        const roofW = tierW[tierW.length - 1];
+        const roofH = isPalace ? 1.9 : 1.05 + (i % 3) * 0.15;
+        const roof = new THREE.ConeGeometry(roofW * 0.68, roofH, 8);
+        roof.translate(x, y + roofH / 2, z);
+        goldGeos.push(roof);
+        if (isPalace) {
+          const spire = new THREE.ConeGeometry(0.12, 0.9, 6);
+          spire.translate(x, y + roofH + 0.45, z);
+          goldGeos.push(spire);
+        }
+      }
+    }
+
+    const cliff = mergeGeometries(cliffGeos)!;
+    const towers = byTowerMat.map((gs) => mergeGeometries(gs)!);
+    const gold = mergeGeometries(goldGeos)!;
+    [...cliffGeos, ...byTowerMat.flat(), ...goldGeos].forEach((g) => g.dispose());
+    return { cliff, towers, gold };
   }, []);
 
-  /** Gopuram-style towers: 2-4 stacked, tapering tiers each, so the skyline
-   *  has real hierarchy instead of one box shape repeated. One dominant
-   *  spire (Ravana's palace) anchors the composition. */
-  const towers = useMemo(() => {
-    const rand = seededRand(31);
-    const PALACE_IDX = 4;
-    const out: Array<{
-      x: number;
-      z: number;
-      tierH: number[];
-      tierW: number[];
-      matIdx: number;
-      isPalace: boolean;
-    }> = [];
-    for (let i = 0; i < 9; i++) {
-      const isPalace = i === PALACE_IDX;
-      const tierCount = isPalace ? 5 : 2 + Math.floor(rand() * 3);
-      let w = isPalace ? 2.1 : 1.05 + rand() * 1.0;
-      const tierH: number[] = [];
-      const tierW: number[] = [];
-      for (let t = 0; t < tierCount; t++) {
-        tierH.push((isPalace ? 1.5 : 1.0 + rand() * 0.55) * (1 - t * 0.06));
-        tierW.push(w);
-        w *= isPalace ? 0.78 : 0.7 - rand() * 0.08;
-      }
-      out.push({
-        x: -13 + i * 3.2 + (rand() - 0.5) * 1.3,
-        z: -49 - rand() * 4.5 - (isPalace ? 2.5 : 0),
-        tierH,
-        tierW,
-        matIdx: i % towerMats.length,
-        isPalace,
-      });
-    }
-    return out;
-  }, []);
+  useEffect(
+    () => () => {
+      merged.cliff.dispose();
+      merged.towers.forEach((g) => g.dispose());
+      merged.gold.dispose();
+    },
+    [merged],
+  );
 
   return (
     <group>
-      {/* island base */}
-      <mesh material={cliffMat} position={[-4, -2.2, -54]} raycast={noRaycast}>
-        <coneGeometry args={[30, 5, 24]} />
-      </mesh>
-      {cliffs.map((c, i) => (
-        <mesh key={i} material={cliffMat} position={c.p} rotation={[0, c.ry, 0]} raycast={noRaycast}>
-          <coneGeometry args={[c.r, c.h, 7]} />
-        </mesh>
+      <mesh geometry={merged.cliff} material={cliffMat} raycast={noRaycast} />
+      {merged.towers.map((g, i) => (
+        <mesh key={i} geometry={g} material={towerMats[i]} raycast={noRaycast} />
       ))}
-      {/* the golden city of Lanka — a skyline of varied gopuram towers */}
-      {towers.map((t, i) => {
-        let y = 0.6;
-        const tiers = t.tierH.map((h, ti) => {
-          y += h / 2;
-          const el = (
-            <group key={ti}>
-              <mesh material={towerMats[t.matIdx]} position={[t.x, y, t.z]} raycast={noRaycast}>
-                <boxGeometry args={[t.tierW[ti], h, t.tierW[ti]]} />
-              </mesh>
-              <mesh material={goldTrim} position={[t.x, y + h / 2, t.z]} raycast={noRaycast}>
-                <boxGeometry args={[t.tierW[ti] * 1.08, 0.07, t.tierW[ti] * 1.08]} />
-              </mesh>
-            </group>
-          );
-          y += h / 2;
-          return el;
-        });
-        const roofW = t.tierW[t.tierW.length - 1];
-        const roofH = t.isPalace ? 1.9 : 1.05 + (i % 3) * 0.15;
-        return (
-          <group key={i}>
-            {tiers}
-            <mesh material={goldTrim} position={[t.x, y + roofH / 2, t.z]} raycast={noRaycast}>
-              <coneGeometry args={[roofW * 0.68, roofH, 8]} />
-            </mesh>
-            {t.isPalace && (
-              <mesh material={goldTrim} position={[t.x, y + roofH + 0.45, t.z]} raycast={noRaycast}>
-                <coneGeometry args={[0.12, 0.9, 6]} />
-              </mesh>
-            )}
-          </group>
-        );
-      })}
+      <mesh geometry={merged.gold} material={goldTrim} raycast={noRaycast} />
       {/* warm rim-light so the skyline separates from the sky instead of
           reading as a flat cutout */}
       <pointLight position={[-2, 11, -45]} intensity={5} distance={42} decay={2} color="#ffb066" />
@@ -355,59 +353,85 @@ function LankaIsland() {
 
 // ---------------------------------------------------------------- mainland shore (behind the white side)
 
-function Palm({ x, z, lean, seed }: { x: number; z: number; lean: number; seed: number }) {
-  const fronds = useMemo(() => {
-    const rand = seededRand(seed);
-    return Array.from({ length: 7 }, (_, i) => ({
-      ry: (i / 7) * Math.PI * 2 + rand() * 0.5,
-      droop: 0.35 + rand() * 0.45,
-    }));
-  }, [seed]);
-  return (
-    <group position={[x, -1.5, z]} rotation={[0, 0, lean]}>
-      <mesh material={palmTrunkMat} position={[0, 2, 0]} raycast={noRaycast}>
-        <cylinderGeometry args={[0.12, 0.26, 4, 6]} />
-      </mesh>
-      <group position={[0, 4.05, 0]}>
-        {fronds.map((f, i) => (
-          // radial arm drooping below horizontal, leaf lying flat along it
-          <group key={i} rotation={[0, f.ry, 0]}>
-            <group rotation={[0, 0, -f.droop]}>
-              <mesh material={palmLeafMat} position={[0.95, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={noRaycast}>
-                <planeGeometry args={[1.9, 0.5]} />
-              </mesh>
-            </group>
-          </group>
-        ))}
-      </group>
-    </group>
-  );
-}
+const PALMS = [
+  { x: -14, z: 49, lean: 0.16, seed: 5 },
+  { x: -9, z: 52, lean: -0.1, seed: 17 },
+  { x: 12, z: 50, lean: 0.08, seed: 29 },
+  { x: 17, z: 47, lean: -0.2, seed: 41 },
+];
 
+/** Static shore scenery merged per material: 4 rocks → 1 draw, 4 trunks → 1,
+ *  28 frond planes → 1 (was ~37 draw calls, now 4 with the sand mound). */
 function MainlandShore() {
-  const rocks = useMemo(() => {
-    const rand = seededRand(47);
-    return Array.from({ length: 4 }, () => ({
-      p: [-20 + rand() * 44, -1.6, 46 + rand() * 8] as [number, number, number],
-      s: 0.8 + rand() * 1.6,
-      ry: rand() * Math.PI,
-    }));
+  const merged = useMemo(() => {
+    const rockGeos: THREE.BufferGeometry[] = [];
+    {
+      const rand = seededRand(47);
+      const m = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      for (let i = 0; i < 4; i++) {
+        const p = new THREE.Vector3(-20 + rand() * 44, -1.6, 46 + rand() * 8);
+        const s = 0.8 + rand() * 1.6;
+        const ry = rand() * Math.PI;
+        const g = new THREE.DodecahedronGeometry(1.1, 0);
+        m.compose(p, q.setFromEuler(new THREE.Euler(0, ry, 0.2)), new THREE.Vector3(s, s, s));
+        g.applyMatrix4(m);
+        rockGeos.push(g);
+      }
+    }
+
+    const trunkGeos: THREE.BufferGeometry[] = [];
+    const leafGeos: THREE.BufferGeometry[] = [];
+    const groupM = new THREE.Matrix4();
+    const rotM = new THREE.Matrix4();
+    for (const p of PALMS) {
+      // group transform: translate(x, -1.5, z) ∘ rotateZ(lean)
+      groupM.makeRotationZ(p.lean).setPosition(p.x, -1.5, p.z);
+      const trunk = new THREE.CylinderGeometry(0.12, 0.26, 4, 6);
+      trunk.translate(0, 2, 0);
+      trunk.applyMatrix4(groupM);
+      trunkGeos.push(trunk);
+      const rand = seededRand(p.seed);
+      for (let i = 0; i < 7; i++) {
+        // radial arm drooping below horizontal, leaf lying flat along it
+        const ry = (i / 7) * Math.PI * 2 + rand() * 0.5;
+        const droop = 0.35 + rand() * 0.45;
+        const leaf = new THREE.PlaneGeometry(1.9, 0.5);
+        leaf.rotateX(-Math.PI / 2);
+        leaf.translate(0.95, 0, 0);
+        leaf.applyMatrix4(rotM.makeRotationZ(-droop));
+        leaf.applyMatrix4(rotM.makeRotationY(ry));
+        leaf.translate(0, 4.05, 0);
+        leaf.applyMatrix4(groupM);
+        leafGeos.push(leaf);
+      }
+    }
+
+    const rocks = mergeGeometries(rockGeos)!;
+    const trunks = mergeGeometries(trunkGeos)!;
+    const leaves = mergeGeometries(leafGeos)!;
+    [...rockGeos, ...trunkGeos, ...leafGeos].forEach((g) => g.dispose());
+    return { rocks, trunks, leaves };
   }, []);
+
+  useEffect(
+    () => () => {
+      merged.rocks.dispose();
+      merged.trunks.dispose();
+      merged.leaves.dispose();
+    },
+    [merged],
+  );
+
   return (
     <group>
       {/* sandy beach mound */}
       <mesh material={sandMat} position={[0, -1.9, 52]} scale={[30, 2.6, 10]} raycast={noRaycast}>
         <sphereGeometry args={[1, 24, 12]} />
       </mesh>
-      {rocks.map((r, i) => (
-        <mesh key={i} material={rockMat} position={r.p} scale={r.s} rotation={[0, r.ry, 0.2]} raycast={noRaycast}>
-          <dodecahedronGeometry args={[1.1, 0]} />
-        </mesh>
-      ))}
-      <Palm x={-14} z={49} lean={0.16} seed={5} />
-      <Palm x={-9} z={52} lean={-0.1} seed={17} />
-      <Palm x={12} z={50} lean={0.08} seed={29} />
-      <Palm x={17} z={47} lean={-0.2} seed={41} />
+      <mesh geometry={merged.rocks} material={rockMat} raycast={noRaycast} />
+      <mesh geometry={merged.trunks} material={palmTrunkMat} raycast={noRaycast} />
+      <mesh geometry={merged.leaves} material={palmLeafMat} raycast={noRaycast} />
     </group>
   );
 }
@@ -461,7 +485,9 @@ const diyaBowlGeo = new THREE.CylinderGeometry(0.16, 0.09, 0.1, 10);
 const diyaFlameGeo = new THREE.SphereGeometry(0.07, 8, 8);
 const diyaBowlMat = new THREE.MeshLambertMaterial({ color: '#5b3a22' });
 
-function FloatingDiyas() {
+// ponytail: diyas bob per-frame so they stay individual objects (~40 calls);
+// instance them with per-frame matrix updates only if a profiler blames them.
+function FloatingDiyas({ glow }: { glow: boolean }) {
   const ref = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
     const g = ref.current;
@@ -477,7 +503,8 @@ function FloatingDiyas() {
         <group key={i} position={[x, -1.36, z]}>
           <mesh geometry={diyaBowlGeo} material={diyaBowlMat} raycast={noRaycast} />
           <mesh geometry={diyaFlameGeo} material={flameMat} position={[0, 0.1, 0]} raycast={noRaycast} />
-          <sprite material={flameGlowMat} position={[0, 0.12, 0]} scale={[0.85, 0.85, 1]} raycast={noRaycast} />
+          {/* the additive halo is pure fill-rate — dropped on the potato tier */}
+          {glow && <sprite material={flameGlowMat} position={[0, 0.12, 0]} scale={[0.85, 0.85, 1]} raycast={noRaycast} />}
         </group>
       ))}
     </group>
@@ -486,22 +513,24 @@ function FloatingDiyas() {
 
 // ---------------------------------------------------------------- assembly
 
-export function Environment({ onSunMesh, oceanSegments = 110, sunLayers = 4 }: {
+export function Environment({ onSunMesh, oceanSegments = 110, sunLayers = 4, starCount = 1200, diyaGlow = true }: {
   onSunMesh?: (m: THREE.Mesh | null) => void;
   oceanSegments?: number;
   sunLayers?: number;
+  starCount?: number;
+  diyaGlow?: boolean;
 }) {
   return (
     <group>
       <mesh material={skyMat} raycast={noRaycast}>
         <sphereGeometry args={[70, 32, 20]} />
       </mesh>
-      <Stars radius={55} depth={25} count={1200} factor={3} saturation={0} fade speed={0.4} />
+      <Stars radius={55} depth={25} count={starCount} factor={3} saturation={0} fade speed={0.4} />
       <Ocean onSunMesh={onSunMesh} segments={oceanSegments} sunLayers={sunLayers} />
       <LankaIsland />
       <MainlandShore />
       <RamSetu />
-      <FloatingDiyas />
+      <FloatingDiyas glow={diyaGlow} />
     </group>
   );
 }

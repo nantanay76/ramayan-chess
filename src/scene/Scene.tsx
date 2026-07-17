@@ -205,16 +205,19 @@ interface QualityTier {
   sunLayers: number;
   /** EffectComposer MSAA — only Ultra pays for it; edge cleanup on strong GPUs. */
   msaa: number;
+  starCount: number;
+  /** false = skip the diyas' additive glow sprites (fill-rate on weak GPUs). */
+  diyaGlow: boolean;
 }
 
 // index 0 is Ultra (opt-in only — the adaptive monitor never climbs into it);
 // 1..4 are the auto-adaptive range, high → potato.
 const QUALITY_TIERS: QualityTier[] = [
-  { dprCap: 2, shadows: 'soft', castShadow: true, shadowMapSize: 2048, composer: true, postScale: 1, godRaySamples: 40, oceanSegments: 128, sunLayers: 4, msaa: 4 },
-  { dprCap: 1.5, shadows: 'soft', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 1, godRaySamples: 30, oceanSegments: 110, sunLayers: 4, msaa: 0 },
-  { dprCap: 1.25, shadows: 'percentage', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 0.75, godRaySamples: 20, oceanSegments: 110, sunLayers: 4, msaa: 0 },
-  { dprCap: 1, shadows: 'basic', castShadow: true, shadowMapSize: 512, composer: true, postScale: 0.5, godRaySamples: 0, oceanSegments: 64, sunLayers: 2, msaa: 0 },
-  { dprCap: 1, shadows: 'basic', castShadow: false, shadowMapSize: 256, composer: false, postScale: 0.5, godRaySamples: 0, oceanSegments: 48, sunLayers: 2, msaa: 0 },
+  { dprCap: 2, shadows: 'soft', castShadow: true, shadowMapSize: 2048, composer: true, postScale: 1, godRaySamples: 40, oceanSegments: 128, sunLayers: 4, msaa: 4, starCount: 1200, diyaGlow: true },
+  { dprCap: 1.5, shadows: 'soft', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 1, godRaySamples: 30, oceanSegments: 110, sunLayers: 4, msaa: 0, starCount: 1200, diyaGlow: true },
+  { dprCap: 1.25, shadows: 'percentage', castShadow: true, shadowMapSize: 1024, composer: true, postScale: 0.75, godRaySamples: 20, oceanSegments: 110, sunLayers: 4, msaa: 0, starCount: 1200, diyaGlow: true },
+  { dprCap: 1, shadows: 'basic', castShadow: true, shadowMapSize: 512, composer: true, postScale: 0.5, godRaySamples: 0, oceanSegments: 64, sunLayers: 2, msaa: 0, starCount: 500, diyaGlow: true },
+  { dprCap: 1, shadows: 'basic', castShadow: false, shadowMapSize: 256, composer: false, postScale: 0.5, godRaySamples: 0, oceanSegments: 48, sunLayers: 2, msaa: 0, starCount: 350, diyaGlow: false },
 ];
 
 /** Named user presets → fixed tier index. 'auto' has no entry (stays adaptive). */
@@ -385,7 +388,13 @@ export function Scene() {
         {/* environment rides the rig too: Lanka rises behind the demon army,
             the mainland shore behind Ram's — whichever side you play */}
         <BoardRig>
-          <Environment onSunMesh={setSunMesh} oceanSegments={tier.oceanSegments} sunLayers={tier.sunLayers} />
+          <Environment
+            onSunMesh={setSunMesh}
+            oceanSegments={tier.oceanSegments}
+            sunLayers={tier.sunLayers}
+            starCount={tier.starCount}
+            diyaGlow={tier.diyaGlow}
+          />
           <Board />
           <Suspense fallback={null}>
             <Pieces />

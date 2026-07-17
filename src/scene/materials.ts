@@ -82,6 +82,13 @@ export const checkMat = new THREE.MeshBasicMaterial({
   opacity: 0.5,
   depthWrite: false,
 });
+/** Divine-counsel hint shimmer — celestial teal so it never reads as last-move gold. */
+export const hintMat = new THREE.MeshBasicMaterial({
+  color: '#5fe8c8',
+  transparent: true,
+  opacity: 0.35,
+  depthWrite: false,
+});
 
 // Environment
 export const flameMat = new THREE.MeshStandardMaterial({

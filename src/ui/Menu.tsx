@@ -5,6 +5,7 @@ import { LEVELS } from '../engine/difficulty';
 import { TIME_CONTROLS } from '../game/timeControls';
 import { playerRank } from '../game/profile';
 import { GraphicsPicker, EnginePowerPicker } from './Settings';
+import { Icon } from './Icon';
 
 export function Menu() {
   const startGame = useGame((s) => s.startGame);
@@ -41,17 +42,21 @@ export function Menu() {
               <span>
                 {profile.wins}<em>W</em> · {profile.losses}<em>L</em> · {profile.draws}<em>D</em>
               </span>
-              {profile.streak > 1 && <span className="ps-streak">🔥 {profile.streak} win streak</span>}
+              {profile.streak > 1 && (
+                <span className="ps-streak">
+                  <Icon name="flame" size={13} /> {profile.streak} win streak
+                </span>
+              )}
             </div>
           </div>
         )}
 
         <div className="mode-tabs">
           <button className={`tab ${mode === 'ai' ? 'active' : ''}`} onClick={() => setMode('ai')}>
-            ⚔️ Vs Computer
+            <Icon name="swords" size={15} /> Vs Computer
           </button>
           <button className={`tab ${mode === 'local' ? 'active' : ''}`} onClick={() => setMode('local')}>
-            🤝 Two Players
+            <Icon name="users" size={15} /> Two Players
           </button>
         </div>
 
@@ -69,7 +74,11 @@ export function Menu() {
                     onClick={() => setLevelIdx(i)}
                     title={lvl.tagline}
                   >
-                    {conquered && <span className="chip-crown" title="Conquered">👑</span>}
+                    {conquered && (
+                      <span className="chip-crown" title="Conquered" aria-label="Conquered">
+                        <Icon name="crown" size={12} />
+                      </span>
+                    )}
                     <span className="chip-elo">{lvl.elo}</span>
                     <span className="chip-rank">{lvl.rank}</span>
                   </button>
@@ -78,11 +87,13 @@ export function Menu() {
             </div>
             {profile.highestConquered < LEVELS.length - 1 && (
               <p className="conquest-hint">
-                ⚔ Next conquest: <b>{LEVELS[profile.highestConquered + 1].rank}</b> ({LEVELS[profile.highestConquered + 1].elo})
+                <Icon name="swords" size={13} /> Next conquest: <b>{LEVELS[profile.highestConquered + 1].rank}</b> ({LEVELS[profile.highestConquered + 1].elo})
               </p>
             )}
             {profile.highestConquered >= LEVELS.length - 1 && (
-              <p className="conquest-hint done">👑 You have conquered the entire ladder — even Brahmastra has fallen.</p>
+              <p className="conquest-hint done">
+                <Icon name="crown" size={14} /> You have conquered the entire ladder — even Brahmastra has fallen.
+              </p>
             )}
             <p className="level-tagline">
               <b>{LEVELS[levelIdx].rankHi}</b> — {LEVELS[levelIdx].tagline}

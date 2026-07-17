@@ -91,6 +91,10 @@ export async function startNewEngineGame(level: Level): Promise<void> {
 
 export function stopEngine(): void {
   engine?.stop();
+  // Also halt any in-flight analysis — its result would be dropped anyway
+  // (gameGen), but a stale depth-12 search shouldn't keep burning CPU or
+  // queue the next eval behind it.
+  analyser?.stop();
 }
 
 // --- Analysis engine -------------------------------------------------------
@@ -119,6 +123,14 @@ async function ensureAnalyser(): Promise<UciEngine> {
     analyserReady = true;
   }
   return analyser;
+}
+
+/** Best move for the side to move — powers the "Divine Counsel" hint. Runs on
+ *  the analyser worker so it never queues behind the opponent's search. */
+export async function bestMoveFor(fen: string, depth = 14): Promise<string | null> {
+  const e = await ensureAnalyser();
+  const { bestmove } = await e.search(fen, `depth ${depth}`);
+  return bestmove && bestmove.length >= 4 ? bestmove : null;
 }
 
 /** Shallow, objective evaluation of a position for the dharma-vs-adharma bar. */
