@@ -15,6 +15,9 @@ import {
   palmLeafMat,
   towerMats,
   goldTrim,
+  moonMat,
+  moonGlowMat,
+  cloudMats,
 } from './materials';
 
 /** Environment meshes never take pointer events — clicks fall through to
@@ -246,6 +249,52 @@ function Ocean({ onSunMesh, segments, sunLayers }: {
   );
 }
 
+// ---------------------------------------------------------------- moon & clouds
+
+/** Rising moon over the mainland side — the counterweight to the dusk sun
+ *  behind Lanka, so the flipped view isn't an empty sky. */
+function Moon({ glow }: { glow: boolean }) {
+  return (
+    <group position={[26, 14, 38]}>
+      {glow && <sprite material={moonGlowMat} scale={[13, 13, 1]} raycast={noRaycast} />}
+      <sprite material={moonMat} scale={[3.4, 3.4, 1]} raycast={noRaycast} />
+    </group>
+  );
+}
+
+const CLOUDS: Array<{ a: number; r: number; y: number; w: number; h: number; m: number }> = (() => {
+  const rand = seededRand(59);
+  return Array.from({ length: 6 }, (_, i) => ({
+    a: (i / 6) * Math.PI * 2 + rand() * 0.7,
+    r: 52 + rand() * 12,
+    y: 8 + rand() * 6,
+    w: 18 + rand() * 12,
+    h: 5 + rand() * 2.5,
+    m: i % cloudMats.length,
+  }));
+})();
+
+/** Slow dusk clouds around the horizon; the whole ring drifts as one group. */
+function DriftingClouds() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (ref.current) ref.current.rotation.y += dt * 0.004;
+  });
+  return (
+    <group ref={ref}>
+      {CLOUDS.map((c, i) => (
+        <sprite
+          key={i}
+          material={cloudMats[c.m]}
+          position={[Math.cos(c.a) * c.r, c.y, Math.sin(c.a) * c.r]}
+          scale={[c.w, c.h, 1]}
+          raycast={noRaycast}
+        />
+      ))}
+    </group>
+  );
+}
+
 // ---------------------------------------------------------------- lanka island (behind the black side)
 
 /** Everything on the island is static, so each material's meshes are merged
@@ -432,6 +481,21 @@ function MainlandShore() {
       <mesh geometry={merged.rocks} material={rockMat} raycast={noRaycast} />
       <mesh geometry={merged.trunks} material={palmTrunkMat} raycast={noRaycast} />
       <mesh geometry={merged.leaves} material={palmLeafMat} raycast={noRaycast} />
+      {/* Vanara army campfires among the palms — the shore's answer to
+          Lanka's glowing windows */}
+      {[
+        [-12, -1.15, 47.5],
+        [2.5, -1.2, 50],
+        [15, -1.15, 46.5],
+      ].map((p, i) => (
+        <sprite
+          key={i}
+          material={flameGlowMat}
+          position={p as [number, number, number]}
+          scale={[1.7, 1.7, 1]}
+          raycast={noRaycast}
+        />
+      ))}
     </group>
   );
 }
@@ -526,6 +590,8 @@ export function Environment({ onSunMesh, oceanSegments = 110, sunLayers = 4, sta
         <sphereGeometry args={[70, 32, 20]} />
       </mesh>
       <Stars radius={55} depth={25} count={starCount} factor={3} saturation={0} fade speed={0.4} />
+      <Moon glow={diyaGlow} />
+      {diyaGlow && <DriftingClouds />}
       <Ocean onSunMesh={onSunMesh} segments={oceanSegments} sunLayers={sunLayers} />
       <LankaIsland />
       <MainlandShore />

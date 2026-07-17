@@ -2,16 +2,57 @@ import { useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { meshBounds } from '@react-three/drei';
+import type { Color, PieceSymbol } from 'chess.js';
 import { useGame } from '../store';
 import type { TrackedPiece } from '../game/pieceTracker';
+import { PIECE_GLYPH } from '../game/characters';
 import { squareToWorld } from './coords';
 import { usePieceGeometry } from './pieceGeometry';
 import { ramMain, ramAccent, lankaMain, lankaAccent } from './materials';
+
+/** Top-down identification badges: from straight above the statues all read as
+ *  discs, so each piece wears a camera-facing chess-glyph token — dark pill,
+ *  army-colored ring + symbol. One SpriteMaterial per color+type, cached. */
+const badgeCache = new Map<string, THREE.SpriteMaterial>();
+const noRaycast = () => null;
+
+function badgeMat(color: Color, type: PieceSymbol): THREE.SpriteMaterial {
+  const key = color + type;
+  let mat = badgeCache.get(key);
+  if (mat) return mat;
+  const armyColor = color === 'w' ? '#f0c46a' : '#b7a3d9';
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const g = canvas.getContext('2d')!;
+  g.beginPath();
+  g.arc(64, 64, 56, 0, Math.PI * 2);
+  g.fillStyle = 'rgba(19, 9, 18, 0.92)';
+  g.fill();
+  g.lineWidth = 7;
+  g.strokeStyle = armyColor;
+  g.stroke();
+  // the FILLED glyph set for both armies (the outline ♔ set reads too thin
+  // at badge size) — the army is carried by color, like a 2D diagram set
+  g.font = '84px "Segoe UI Symbol", serif';
+  g.fillStyle = armyColor;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(PIECE_GLYPH.b[type], 64, 68);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  // depthTest off: it's a UI marker — never clipped by a tall statue, so it
+  // can sit low enough to stay visually glued to its square from above
+  mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, toneMapped: false });
+  badgeCache.set(key, mat);
+  return mat;
+}
 
 function PieceMesh({ piece }: { piece: TrackedPiece }) {
   const isSelected = useGame((s) => s.selected === piece.square);
   const clickSquare = useGame((s) => s.clickSquare);
   const flipped = useGame((s) => s.flipped);
+  const topDown = useGame((s) => s.topDownView);
   const [hovered, setHovered] = useState(false);
 
   const army = piece.color === 'w' ? 'ram' : 'lanka';
@@ -86,6 +127,14 @@ function PieceMesh({ piece }: { piece: TrackedPiece }) {
           />
         )}
       </group>
+      {topDown && (
+        <sprite
+          material={badgeMat(piece.color, piece.type)}
+          position={[0, 1.3, 0]}
+          scale={[0.5, 0.5, 1]}
+          raycast={noRaycast}
+        />
+      )}
     </group>
   );
 }

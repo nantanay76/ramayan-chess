@@ -125,6 +125,91 @@ export const cityGlowMat = new THREE.SpriteMaterial({
   transparent: true,
 });
 
+function moonTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const g = canvas.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 40, 64, 64, 52);
+  grad.addColorStop(0, 'rgba(236, 241, 255, 0.98)');
+  grad.addColorStop(0.88, 'rgba(224, 231, 252, 0.92)');
+  grad.addColorStop(1, 'rgba(224, 231, 252, 0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(64, 64, 52, 0, Math.PI * 2);
+  g.fill();
+  // faint maria so it reads as a moon, not a lamp
+  g.fillStyle = 'rgba(175, 186, 220, 0.4)';
+  for (const [x, y, r] of [[48, 50, 8], [76, 66, 10], [57, 80, 5], [82, 42, 4]]) {
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  return new THREE.CanvasTexture(canvas);
+}
+
+/** Pale rising moon over the mainland, opposite the dusk sun. */
+export const moonMat = new THREE.SpriteMaterial({
+  map: moonTexture(),
+  transparent: true,
+  depthWrite: false,
+  fog: false,
+});
+export const moonGlowMat = new THREE.SpriteMaterial({
+  map: radialGlowTexture('rgba(205, 218, 250, 0.4)', 'rgba(150, 172, 225, 0.13)'),
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  transparent: true,
+  fog: false,
+});
+
+function cloudTexture(seed: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 96;
+  const g = canvas.getContext('2d')!;
+  let s = seed;
+  const rand = () => {
+    s = (s * 16807) % 2147483647;
+    return s / 2147483647;
+  };
+  // plum body: overlapping soft blobs along the strip
+  for (let i = 0; i < 9; i++) {
+    const x = 30 + rand() * 196;
+    const y = 38 + rand() * 26;
+    const r = 18 + rand() * 26;
+    const grad = g.createRadialGradient(x, y, 2, x, y, r);
+    grad.addColorStop(0, 'rgba(74, 48, 98, 0.5)');
+    grad.addColorStop(0.7, 'rgba(58, 35, 80, 0.26)');
+    grad.addColorStop(1, 'rgba(58, 35, 80, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 256, 96);
+  }
+  // warm dusk light catching the underside
+  for (let i = 0; i < 5; i++) {
+    const x = 40 + rand() * 176;
+    const y = 60 + rand() * 16;
+    const r = 12 + rand() * 16;
+    const grad = g.createRadialGradient(x, y, 1, x, y, r);
+    grad.addColorStop(0, 'rgba(216, 122, 74, 0.3)');
+    grad.addColorStop(1, 'rgba(216, 122, 74, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 256, 96);
+  }
+  return new THREE.CanvasTexture(canvas);
+}
+
+/** Three cloud variants shared across the horizon sprites. */
+export const cloudMats = [21, 47, 83].map(
+  (seed) =>
+    new THREE.SpriteMaterial({
+      map: cloudTexture(seed),
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+    }),
+);
+
 // Distant land — cheapest lit materials, softened by fog
 export const sandMat = new THREE.MeshLambertMaterial({ color: '#7d5f45' });
 export const cliffMat = new THREE.MeshLambertMaterial({ color: '#3a2a4a', flatShading: true });

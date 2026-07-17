@@ -789,6 +789,14 @@ button {
   }
 }
 
+/* desktop: keep the war hourglasses clear of the battle-scroll panel
+   (right: 12px, 248px wide) — park them at the scene's right edge instead */
+@media (min-width: 921px) {
+  .clocks {
+    right: 292px;
+  }
+}
+
 @media (max-width: 920px) {
   .clocks {
     right: calc(8px + env(safe-area-inset-right));
