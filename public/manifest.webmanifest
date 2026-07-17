@@ -2,6 +2,7 @@
   "name": "Ramayan Chess — रामायण शतरंज",
   "short_name": "Ramayan Chess",
   "description": "A grand 3D chess game where Shri Ram's army faces Ravana's Lanka, powered by Stockfish from 500 to 3200 ELO.",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
@@ -13,6 +14,24 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

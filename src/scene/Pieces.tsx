@@ -14,6 +14,10 @@ import { ramMain, ramAccent, lankaMain, lankaAccent } from './materials';
  *  discs, so each piece wears a camera-facing chess-glyph token — dark pill,
  *  army-colored ring + symbol. One SpriteMaterial per color+type, cached. */
 const badgeCache = new Map<string, THREE.SpriteMaterial>();
+
+/** Global statue upscale — piece-local, so square spacing is untouched.
+ *  Bases are ~0.7 of a square; keep below ~1.15 or neighbours start kissing. */
+const PIECE_SCALE = 1.09;
 const noRaycast = () => null;
 
 function badgeMat(color: Color, type: PieceSymbol): THREE.SpriteMaterial {
@@ -112,7 +116,7 @@ function PieceMesh({ piece }: { piece: TrackedPiece }) {
         document.body.style.cursor = 'auto';
       }}
     >
-      <group ref={rotRef} rotation={[0, ry, 0]} scale={hovered && !isSelected ? 1.04 : 1}>
+      <group ref={rotRef} rotation={[0, ry, 0]} scale={(hovered && !isSelected ? 1.04 : 1) * PIECE_SCALE}>
         {/* meshBounds: pointer picking against bounding spheres, not triangles */}
         <mesh
           geometry={geo.main}

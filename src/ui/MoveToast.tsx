@@ -30,7 +30,7 @@ export function MoveToast() {
 
   useEffect(() => {
     if (!notice) return;
-    setShown({ seq: notice.seq, className: 'q-best', glyph: '½', label: notice.en, hi: notice.hi });
+    setShown({ seq: notice.seq, className: 'q-best', glyph: notice.glyph ?? '⚔', label: notice.en, hi: notice.hi });
     const t = setTimeout(() => setShown(null), 2400);
     return () => clearTimeout(t);
   }, [notice?.seq, notice]);

@@ -4,8 +4,42 @@ import { useGame, type Mode } from '../store';
 import { LEVELS } from '../engine/difficulty';
 import { TIME_CONTROLS } from '../game/timeControls';
 import { playerRank } from '../game/profile';
+import { ACHIEVEMENTS, loadUnlocked } from '../game/achievements';
 import { GraphicsPicker, EnginePowerPicker } from './Settings';
 import { Icon } from './Icon';
+
+function TrophyModal({ onClose }: { onClose: () => void }) {
+  const unlocked = loadUnlocked();
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal trophy-modal" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-title-hi big">वीरता का मंदिर</h2>
+        <h3 className="modal-title-en">Hall of Valour</h3>
+        <div className="trophy-list">
+          {ACHIEVEMENTS.map((a) => {
+            const got = unlocked.has(a.id);
+            return (
+              <div key={a.id} className={`trophy ${got ? 'got' : 'locked'}`}>
+                <Icon name="crown" size={16} />
+                <span className="trophy-text">
+                  <b>
+                    {a.en} <em>{a.hi}</em>
+                  </b>
+                  <small>{a.desc}</small>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Menu() {
   const startGame = useGame((s) => s.startGame);
@@ -14,6 +48,7 @@ export function Menu() {
   const [levelIdx, setLevelIdx] = useState(1);
   const [color, setColor] = useState<Color>('w');
   const [tcIdx, setTcIdx] = useState(0);
+  const [trophies, setTrophies] = useState(false);
 
   const rank = playerRank(profile.rating);
   const played = profile.wins + profile.losses + profile.draws;
@@ -48,8 +83,12 @@ export function Menu() {
                 </span>
               )}
             </div>
+            <button className="btn small trophy-btn" onClick={() => setTrophies(true)}>
+              <Icon name="crown" size={13} /> Trophies
+            </button>
           </div>
         )}
+        {trophies && <TrophyModal onClose={() => setTrophies(false)} />}
 
         <div className="mode-tabs">
           <button className={`tab ${mode === 'ai' ? 'active' : ''}`} onClick={() => setMode('ai')}>

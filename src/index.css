@@ -469,7 +469,7 @@ button {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse 74% 68% at 50% 44%, transparent 40%, rgba(10, 4, 9, 0.62) 100%);
+  background: radial-gradient(ellipse 74% 68% at 50% 44%, transparent 40%, rgba(10, 4, 9, 0.5) 100%);
 }
 
 @media (min-width: 921px) {
@@ -800,6 +800,20 @@ button {
   }
 }
 
+/* first-time attention pulse on the top-down view button — dies forever
+   once the player tries the view (topDownSeen in rc:ui) */
+.view-btn.attn {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 14px -2px rgba(240, 196, 106, 0.55);
+  animation: view-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes view-pulse {
+  50% {
+    box-shadow: 0 0 20px 2px rgba(240, 196, 106, 0.85);
+  }
+}
+
 /* desktop: keep the war hourglasses clear of the battle-scroll panel
    (right: 12px, 248px wide) — park them at the scene's right edge instead */
 @media (min-width: 921px) {
@@ -837,6 +851,50 @@ button {
   background: rgba(23, 11, 22, 0.72);
   backdrop-filter: blur(10px);
   overflow: hidden;
+}
+
+/* desktop collapse: hand the panel's 280px back to the battlefield. The
+   chevron rides the panel's left edge, then parks at the screen edge.
+   No transition on .scene-wrap right — R3F's ResizeObserver would re-snap
+   the camera every animation frame. */
+/* selector chain matches the mobile `.btn.small.icon` touch-target rule so
+   display:none actually holds on phones */
+.btn.small.icon.panel-collapse {
+  display: none;
+}
+
+@media (min-width: 921px) {
+  .btn.small.icon.panel-collapse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    right: 272px;
+    transform: translateY(-50%);
+    z-index: 7;
+    transition: right 0.25s ease;
+  }
+
+  .side-panel {
+    transition: transform 0.25s ease;
+  }
+
+  .panel-collapsed .side-panel {
+    transform: translateX(calc(100% + 40px));
+  }
+
+  .panel-collapsed .panel-collapse {
+    right: 10px;
+  }
+
+  .panel-collapsed .scene-wrap {
+    right: 0;
+  }
+
+  .panel-collapsed .clocks {
+    right: 12px;
+  }
 }
 
 .panel-section h4 {
@@ -1156,6 +1214,96 @@ button {
   font-size: 0.82rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  color: var(--cream-dim);
+}
+
+/* ------------------------------------------------- achievements */
+.unlock-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+
+.unlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 196, 106, 0.55);
+  background: rgba(74, 20, 32, 0.55);
+  color: var(--gold-bright);
+  animation: toast-pop 0.4s cubic-bezier(0.2, 1.4, 0.5, 1) both;
+}
+
+.unlock-en {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+}
+
+.unlock-hi {
+  font-family: var(--font-hi);
+  font-size: 0.85rem;
+  color: var(--cream-dim);
+}
+
+.trophy-btn {
+  flex: 0 0 auto;
+}
+
+.modal.trophy-modal {
+  width: min(440px, 100%);
+}
+
+.trophy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 18px;
+  text-align: left;
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+}
+
+.trophy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(217, 164, 65, 0.3);
+  background: rgba(23, 11, 22, 0.5);
+  color: var(--gold-bright);
+}
+
+.trophy.locked {
+  opacity: 0.42;
+  color: var(--cream-dim);
+}
+
+.trophy-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.trophy-text b {
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+}
+
+.trophy-text em {
+  font-family: var(--font-hi);
+  font-style: normal;
+  color: var(--cream-dim);
+  margin-left: 6px;
+}
+
+.trophy-text small {
+  font-size: 0.72rem;
   color: var(--cream-dim);
 }
 
@@ -1706,6 +1854,21 @@ button {
   opacity: 1;
   transform-origin: top right;
   animation: settings-in 0.18s ease both;
+}
+
+/* phones: pin the popover to the viewport — anchored to the gear it can hang
+   past the screen edge. Must live AFTER the base .settings-pop rule or the
+   cascade hands every shared property straight back (the v4.1 clocks lesson). */
+@media (max-width: 920px) {
+  .settings-pop {
+    position: fixed;
+    top: calc(54px + env(safe-area-inset-top));
+    left: auto;
+    right: max(8px, env(safe-area-inset-right));
+    width: min(300px, calc(100vw - 16px));
+    max-height: calc(100dvh - 70px);
+    overflow-y: auto;
+  }
 }
 
 @keyframes settings-in {

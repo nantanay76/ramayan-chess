@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGame } from '../store';
 import { ReviewModal } from './ReviewModal';
 import { Icon } from './Icon';
@@ -10,11 +10,25 @@ export function GameOverModal() {
   const playerColor = useGame((s) => s.playerColor);
   const historyLen = useGame((s) => s.history.length);
   const lastResult = useGame((s) => s.lastResult);
+  const lastUnlocks = useGame((s) => s.lastUnlocks);
   const startGame = useGame((s) => s.startGame);
   const backToMenu = useGame((s) => s.backToMenu);
   const [reviewing, setReviewing] = useState(false);
+  const [held, setHeld] = useState(false);
 
-  if (!gameOver) return null;
+  // let the checkmate spark volley play out before the modal covers the board
+  useEffect(() => {
+    if (!gameOver) {
+      setHeld(false);
+      return;
+    }
+    if (gameOver.reason !== 'checkmate') return;
+    setHeld(true);
+    const t = setTimeout(() => setHeld(false), 1600);
+    return () => clearTimeout(t);
+  }, [gameOver]);
+
+  if (!gameOver || held) return null;
 
   if (reviewing) return <ReviewModal onClose={() => setReviewing(false)} />;
 
@@ -78,6 +92,18 @@ export function GameOverModal() {
               </span>
               <span className="rating-new">rating {lastResult.newRating}</span>
             </div>
+          </div>
+        )}
+
+        {lastUnlocks.length > 0 && (
+          <div className="unlock-strip">
+            {lastUnlocks.map((u) => (
+              <div key={u.en} className="unlock" title={u.desc}>
+                <Icon name="crown" size={14} />
+                <span className="unlock-en">{u.en}</span>
+                <span className="unlock-hi">{u.hi}</span>
+              </div>
+            ))}
           </div>
         )}
 

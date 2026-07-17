@@ -8,6 +8,7 @@ import { Board, EdgeLabels } from './Board';
 import { Pieces } from './Pieces';
 import { Environment } from './Environment';
 import { StudioEnv } from './StudioEnv';
+import { BattleFx } from './Particles';
 
 /**
  * The cinematic camera never moves on its own during play — re-framed only
@@ -41,7 +42,7 @@ function cinematicTarget(aspect: number): CameraTarget {
   const fov = aspect < 1 ? 52 : 46;
   // pull back until the board (~10.6 units with border) fits horizontally
   const tanH = Math.tan((fov * Math.PI) / 360) * aspect;
-  const dist = Math.min(24, Math.max(16, 5.15 / tanH));
+  const dist = Math.min(24, Math.max(15.4, 4.9 / tanH));
   const pos = new THREE.Vector3(0, Math.sin(PITCH), Math.cos(PITCH)).multiplyScalar(dist).add(LOOK_AT);
   return { pos, fov, lookAt: LOOK_AT };
 }
@@ -52,7 +53,7 @@ function topDownTarget(aspect: number): CameraTarget {
   // near-90° pitch means either axis can be the binding one depending on
   // orientation, unlike the oblique cinematic angle where horizontal always
   // is — so pick whichever axis is tighter instead of reusing that formula.
-  const dist = Math.min(30, Math.max(15, 5.65 / (tanV * Math.min(1, aspect))));
+  const dist = Math.min(30, Math.max(12.8, 5.0 / (tanV * Math.min(1, aspect))));
   const pos = new THREE.Vector3(0, Math.sin(TOP_PITCH), Math.cos(TOP_PITCH)).multiplyScalar(dist).add(TOP_LOOK_AT);
   return { pos, fov, lookAt: TOP_LOOK_AT };
 }
@@ -177,7 +178,7 @@ function Effects({ sunMesh, resolutionScale, godRaySamples, msaa }: {
       // subtle filmic grade — richer golds, deeper maroons, no crushed blacks.
       // (the vignette moved to CSS on .scene-wrap so every tier — including
       // the composer-less potato tier — wears the identical frame)
-      <BrightnessContrast key="grade-bc" brightness={0} contrast={0.08} />,
+      <BrightnessContrast key="grade-bc" brightness={0.03} contrast={0.08} />,
       <HueSaturation key="grade-hs" saturation={0.08} />,
     ].filter(Boolean) as ReactElement[];
     return list;
@@ -369,7 +370,7 @@ export function Scene() {
       >
         <PerfProbe forceTier={setForcedTier} />
         <StartupFade onReady={() => setSceneReady(true)} />
-        <StudioEnv intensity={0.45} />
+        <StudioEnv intensity={0.52} />
         {/* the adaptive monitor only runs in Auto mode; a fixed preset must
             never auto-flip tiers (that would be a visible mid-game stutter) */}
         {isAuto && monitorReady && forcedTier === null && (
@@ -386,7 +387,7 @@ export function Scene() {
         <CameraRig />
         <fog attach="fog" args={['#241536', 30, 120]} />
         {/* dropped from 0.55 when StudioEnv IBL was added — combined they wash out */}
-        <ambientLight intensity={0.42} color="#ffd9b0" />
+        <ambientLight intensity={0.48} color="#ffd9b0" />
         <ShadowSun mapSize={tier.shadowMapSize} castShadow={tier.castShadow} />
         <directionalLight position={[-8, 6, -6]} intensity={0.4} color="#7d9bff" />
         {/* environment rides the rig too: Lanka rises behind the demon army,
@@ -403,6 +404,8 @@ export function Scene() {
           <Suspense fallback={null}>
             <Pieces />
           </Suspense>
+          {/* gated with diyaGlow: every tier keeps the sparks except potato */}
+          {tier.diyaGlow && <BattleFx />}
         </BoardRig>
         <EdgeLabels />
         {tier.composer && (

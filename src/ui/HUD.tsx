@@ -29,6 +29,8 @@ export function HUD() {
   const soundOn = useGame((s) => s.soundOn);
   const musicOn = useGame((s) => s.musicOn);
   const topDownView = useGame((s) => s.topDownView);
+  const topDownSeen = useGame((s) => s.topDownSeen);
+  const panelCollapsed = useGame((s) => s.panelCollapsed);
 
   const backToMenu = useGame((s) => s.backToMenu);
   const undoMove = useGame((s) => s.undoMove);
@@ -39,6 +41,7 @@ export function HUD() {
   const toggleSound = useGame((s) => s.toggleSound);
   const toggleMusic = useGame((s) => s.toggleMusic);
   const toggleTopDownView = useGame((s) => s.toggleTopDownView);
+  const togglePanelCollapsed = useGame((s) => s.togglePanelCollapsed);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -107,7 +110,7 @@ export function HUD() {
             <Icon name={musicOn ? 'music' : 'musicOff'} />
           </button>
           <button
-            className="btn small icon"
+            className={`btn small icon view-btn${topDownSeen ? '' : ' attn'}`}
             onClick={toggleTopDownView}
             title={topDownView ? 'Cinematic view' : 'Top-down view'}
             aria-label={topDownView ? 'Switch to cinematic view' : 'Switch to top-down view'}
@@ -166,6 +169,17 @@ export function HUD() {
           </div>
         </div>
       </div>
+      {/* desktop only: sibling of the panel so it stays put while the panel
+          slides away — collapsing hands the whole width to the battlefield */}
+      <button
+        className="btn small icon panel-collapse"
+        onClick={togglePanelCollapsed}
+        title={panelCollapsed ? 'Open the battle scroll' : 'Collapse the battle scroll'}
+        aria-label={panelCollapsed ? 'Open the battle scroll panel' : 'Collapse the battle scroll panel'}
+        aria-expanded={!panelCollapsed}
+      >
+        <Icon name={panelCollapsed ? 'chevronLeft' : 'chevronRight'} />
+      </button>
 
       <div className="hud-bottom">
         <button className="btn" onClick={undoMove} disabled={history.length === 0 && !thinking}>

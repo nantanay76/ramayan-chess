@@ -7,7 +7,9 @@ import { getAiMove, startNewEngineGame, stopEngine, evaluatePosition, bestMoveFo
 import { classifyMove, type Ev, type MoveQuality } from './game/moveQuality';
 import { UNLIMITED, type TimeControl } from './game/timeControls';
 import { loadProfile, saveProfile, applyResult, type Profile } from './game/profile';
-import { playSound, playCaptureVoice, setSoundEnabled, startMusic, stopMusic } from './audio/sounds';
+import { battleQuote, type QuoteEvent } from './game/quotes';
+import { evaluateAchievements } from './game/achievements';
+import { playSound, playCaptureVoice, setSoundEnabled, startMusic, stopMusic, setMusicIntensity } from './audio/sounds';
 
 export type Mode = 'ai' | 'local';
 export type Screen = 'menu' | 'game';
@@ -68,18 +70,37 @@ const UI_KEY = 'rc:ui';
 interface UiPrefs {
   showMoveDots: boolean;
   showCoords: boolean;
+  panelCollapsed: boolean;
+  topDownSeen: boolean;
+  soundOn: boolean;
+  musicOn: boolean;
 }
+const UI_DEFAULTS: UiPrefs = {
+  showMoveDots: true,
+  showCoords: true,
+  panelCollapsed: false,
+  topDownSeen: false,
+  soundOn: true,
+  musicOn: true,
+};
 function loadUiPrefs(): UiPrefs {
   try {
     const raw = localStorage.getItem(UI_KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<UiPrefs>;
-      return { showMoveDots: p.showMoveDots !== false, showCoords: p.showCoords !== false };
+      return {
+        showMoveDots: p.showMoveDots !== false,
+        showCoords: p.showCoords !== false,
+        panelCollapsed: p.panelCollapsed === true,
+        topDownSeen: p.topDownSeen === true,
+        soundOn: p.soundOn !== false,
+        musicOn: p.musicOn !== false,
+      };
     }
   } catch {
     // unavailable or corrupt JSON — fall through to defaults
   }
-  return { showMoveDots: true, showCoords: true };
+  return { ...UI_DEFAULTS };
 }
 function saveUiPrefs(p: UiPrefs): void {
   try {
@@ -193,8 +214,11 @@ export interface GameStore extends BoardSnapshot {
    *  the loading veil waits on this so the cold-start hitch stays hidden. */
   sceneReady: boolean;
   engineError: string | null;
-  /** Transient system message toast (e.g. a declined draw offer). */
-  notice: { seq: number; en: string; hi: string } | null;
+  /** Transient system message toast (e.g. a declined draw offer, a battle cry). */
+  notice: { seq: number; en: string; hi: string; glyph?: string } | null;
+  /** Trophies earned by the game that just ended — shown in the game-over
+   *  modal; empty otherwise. */
+  lastUnlocks: { en: string; hi: string; desc: string }[];
   /** Divine-counsel hint: the best-move squares to shimmer on the board. */
   hint: { from: Square; to: Square } | null;
   hintsLeft: number;
@@ -203,6 +227,10 @@ export interface GameStore extends BoardSnapshot {
   drawOffered: boolean;
   showMoveDots: boolean;
   showCoords: boolean;
+  /** Desktop battle-scroll panel collapsed to enlarge the board. */
+  panelCollapsed: boolean;
+  /** True once the player has tried the top-down view — kills the attention pulse. */
+  topDownSeen: boolean;
 
   startGame(mode: Mode, levelIdx: number, playerColor: Color, timeControl?: TimeControl): void;
   backToMenu(): void;
@@ -217,6 +245,7 @@ export interface GameStore extends BoardSnapshot {
   offerDraw(): void;
   toggleMoveDots(): void;
   toggleCoords(): void;
+  togglePanelCollapsed(): void;
   flipBoard(): void;
   toggleTopDownView(): void;
   toggleSound(): void;
@@ -244,14 +273,59 @@ export const useGame = create<GameStore>((set, get) => {
     else set({ blackMs: remaining, clockSince: nextSince });
   }
 
+  /** Merge-and-persist a UI pref change (single writer for the rc:ui key). */
+  function setUiPref(patch: Partial<UiPrefs>): void {
+    const s = get();
+    const next: UiPrefs = {
+      showMoveDots: s.showMoveDots,
+      showCoords: s.showCoords,
+      panelCollapsed: s.panelCollapsed,
+      topDownSeen: s.topDownSeen,
+      soundOn: s.soundOn,
+      musicOn: s.musicOn,
+      ...patch,
+    };
+    saveUiPrefs(next);
+    set(next);
+  }
+
   /** Fold a finished vs-computer game into the persistent campaign profile. */
   function finalizeResult(over: GameOver): void {
     const s = get();
-    if (s.mode !== 'ai') return;
+    // lastResult doubles as a fired-once latch: every game-end path funnels
+    // here, and a second call for the same game must not double-apply rating.
+    if (s.mode !== 'ai' || s.lastResult) return;
     const score = !over.winner ? 0.5 : over.winner === s.playerColor ? 1 : 0;
+    const ratingBefore = s.profile.rating;
     const { profile, ratingDelta, newlyConquered } = applyResult(s.profile, s.levelIdx, score);
     saveProfile(profile);
-    set({ profile, lastResult: { ratingDelta, newRating: profile.rating, newlyConquered } });
+    const fresh = evaluateAchievements({
+      profile,
+      levelIdx: s.levelIdx,
+      score,
+      playerColor: s.playerColor,
+      lostByPlayer: s.playerColor === 'w' ? s.capturedByBlack : s.capturedByWhite,
+      timed: s.whiteMs != null,
+      ratingBefore,
+    });
+    set({
+      profile,
+      lastResult: { ratingDelta, newRating: profile.rating, newlyConquered },
+      lastUnlocks: fresh.map((a) => ({ en: a.en, hi: a.hi, desc: a.desc })),
+    });
+  }
+
+  /** Occasional themed battle cry — throttled so it stays a garnish. */
+  let lastQuotePly = -99;
+  function maybeQuote(ev: QuoteEvent): void {
+    const ply = get().history.length;
+    if (ply - lastQuotePly < 6 || Math.random() >= 0.4) return;
+    lastQuotePly = ply;
+    set({ notice: { seq: ++noteSeq, ...battleQuote(ev) } });
+  }
+
+  function resetQuotes(): void {
+    lastQuotePly = -99;
   }
 
   function applyMove(from: Square, to: Square, promotion?: PieceSymbol): boolean {
@@ -272,9 +346,11 @@ export const useGame = create<GameStore>((set, get) => {
       else playSound('lose');
     } else if (snap.inCheck) {
       playSound('check');
+      maybeQuote('check');
     } else if (move.flags.includes('c') || move.flags.includes('e')) {
       playSound('capture');
       playCaptureVoice(move.color);
+      maybeQuote(move.color === 'w' ? 'capture-ram' : 'capture-lanka');
     } else {
       playSound('move');
     }
@@ -300,7 +376,31 @@ export const useGame = create<GameStore>((set, get) => {
       scheduleEval(isPlayerMove ? { moverColor: move.color, before } : undefined);
       maybeAiMove();
     }
+    updateMusicIntensity();
     return true;
+  }
+
+  /** Feed the adaptive score: 0.15 is meditative calm, 1 is full war. Reads
+   *  only already-derived state, so it's safe to call after any set(). */
+  function updateMusicIntensity(): void {
+    const s = get();
+    if (s.gameOver || s.screen !== 'game') {
+      setMusicIntensity(0.15);
+      return;
+    }
+    const caps = s.capturedByWhite.length + s.capturedByBlack.length;
+    const evalTension = s.evalMate != null ? 1 : s.evalCp != null ? Math.min(1, Math.abs(s.evalCp) / 400) : 0;
+    const lowClock =
+      s.clockSince != null &&
+      ((s.whiteMs != null && s.whiteMs < 20000) || (s.blackMs != null && s.blackMs < 20000));
+    const v =
+      0.15 +
+      0.2 * Math.min(1, s.history.length / 16) +
+      (s.inCheck ? 0.25 : 0) +
+      0.2 * evalTension +
+      0.15 * Math.min(1, caps / 8) +
+      (lowClock ? 0.25 : 0);
+    setMusicIntensity(v);
   }
 
   /** Kick a best-effort eval of the current position for the meter. Cheap and
@@ -332,7 +432,10 @@ export const useGame = create<GameStore>((set, get) => {
         }
 
         // The bar shows the newest position only.
-        if (token === evalToken) set({ evalCp: res.cp, evalMate: res.mate });
+        if (token === evalToken) {
+          set({ evalCp: res.cp, evalMate: res.mate });
+          updateMusicIntensity();
+        }
       })
       .catch(() => {
         // eval bar is non-essential — never let it surface an error
@@ -396,8 +499,6 @@ export const useGame = create<GameStore>((set, get) => {
     thinking: false,
     flipped: false,
     topDownView: false,
-    soundOn: true,
-    musicOn: false,
     enginePower: loadEnginePower(),
     evalCp: 0,
     evalMate: null,
@@ -405,6 +506,7 @@ export const useGame = create<GameStore>((set, get) => {
     lastNote: null,
     profile: loadProfile(),
     lastResult: null,
+    lastUnlocks: [],
     timeControl: UNLIMITED,
     whiteMs: null,
     blackMs: null,
@@ -444,6 +546,7 @@ export const useGame = create<GameStore>((set, get) => {
         annotations: [],
         lastNote: null,
         lastResult: null,
+        lastUnlocks: [],
         notice: null,
         hint: null,
         hintsLeft: 3,
@@ -456,6 +559,10 @@ export const useGame = create<GameStore>((set, get) => {
         clockSince: timed ? Date.now() : null,
         flipped: mode === 'ai' && playerColor === 'b',
       });
+      // The "begin battle" click is the user gesture autoplay policy wants.
+      if (get().musicOn) startMusic();
+      updateMusicIntensity();
+      resetQuotes();
       scheduleEval();
       if (mode === 'ai') {
         configureEnginePower(get().enginePower);
@@ -482,6 +589,7 @@ export const useGame = create<GameStore>((set, get) => {
       gameGen++;
       stopEngine();
       set({ screen: 'menu', selected: null, targets: [], promotionPending: null, thinking: false, clockSince: null });
+      updateMusicIntensity();
     },
 
     flagClock(color) {
@@ -507,6 +615,7 @@ export const useGame = create<GameStore>((set, get) => {
         ...flagged,
       });
       finalizeResult(over);
+      updateMusicIntensity();
     },
 
     clickSquare(square) {
@@ -590,6 +699,10 @@ export const useGame = create<GameStore>((set, get) => {
         lastNote: null,
         notice: null,
         hint: null,
+        // undoing past a finished game re-arms the finalize latch — the
+        // replayed ending is a genuinely new result
+        lastResult: null,
+        lastUnlocks: [],
         whiteMs,
         blackMs,
         // hand the running clock to the side now on the move (no elapsed time restored)
@@ -620,6 +733,7 @@ export const useGame = create<GameStore>((set, get) => {
         clockSince: null,
       });
       finalizeResult(over);
+      updateMusicIntensity();
     },
 
     requestHint() {
@@ -670,6 +784,7 @@ export const useGame = create<GameStore>((set, get) => {
           clockSince: null,
         });
         finalizeResult(over);
+        updateMusicIntensity();
       } else {
         const lankaAi = s.playerColor === 'w';
         set({
@@ -681,15 +796,15 @@ export const useGame = create<GameStore>((set, get) => {
     },
 
     toggleMoveDots() {
-      const next = { showMoveDots: !get().showMoveDots, showCoords: get().showCoords };
-      saveUiPrefs(next);
-      set(next);
+      setUiPref({ showMoveDots: !get().showMoveDots });
     },
 
     toggleCoords() {
-      const next = { showMoveDots: get().showMoveDots, showCoords: !get().showCoords };
-      saveUiPrefs(next);
-      set(next);
+      setUiPref({ showCoords: !get().showCoords });
+    },
+
+    togglePanelCollapsed() {
+      setUiPref({ panelCollapsed: !get().panelCollapsed });
     },
 
     flipBoard() {
@@ -697,20 +812,21 @@ export const useGame = create<GameStore>((set, get) => {
     },
 
     toggleTopDownView() {
+      if (!get().topDownSeen) setUiPref({ topDownSeen: true });
       set({ topDownView: !get().topDownView });
     },
 
     toggleSound() {
       const on = !get().soundOn;
       setSoundEnabled(on);
-      set({ soundOn: on });
+      setUiPref({ soundOn: on });
     },
 
     toggleMusic() {
       const on = !get().musicOn;
       if (on) startMusic();
       else stopMusic();
-      set({ musicOn: on });
+      setUiPref({ musicOn: on });
     },
 
     setGraphicsPref(pref) {
@@ -738,3 +854,6 @@ export const useGame = create<GameStore>((set, get) => {
     },
   };
 });
+
+// Honor a persisted mute — the sounds module defaults to enabled.
+setSoundEnabled(useGame.getState().soundOn);

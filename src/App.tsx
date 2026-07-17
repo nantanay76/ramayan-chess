@@ -25,11 +25,12 @@ function VeilFallback() {
 
 export default function App() {
   const screen = useGame((s) => s.screen);
+  const panelCollapsed = useGame((s) => s.panelCollapsed);
 
   if (screen === 'menu') return <Menu />;
 
   return (
-    <div className="game-root">
+    <div className={`game-root${panelCollapsed ? ' panel-collapsed' : ''}`}>
       <Suspense fallback={<VeilFallback />}>
         <GameCanvas />
       </Suspense>
